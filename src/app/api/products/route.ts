@@ -4,7 +4,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/server/audit";
 import { prisma } from "@/server/db";
 import { getCurrentSession } from "@/server/session";
-import { publicUrl } from "@/server/url";
+import { publicUrl, redirectBackUrl } from "@/server/url";
 
 const productSchema = z.object({
   sku: z.string().max(60).optional(),
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (session.role === MembershipRole.VIEWER) {
-    return NextResponse.redirect(publicUrl(request, "/command?product=forbidden"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { product: "forbidden" }), 303);
   }
 
   const form = await request.formData();
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!parsed.success) {
-    return NextResponse.redirect(publicUrl(request, "/command?product=invalid"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { product: "invalid" }), 303);
   }
 
   try {
@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
       userAgent: request.headers.get("user-agent") ?? undefined
     });
 
-    return NextResponse.redirect(publicUrl(request, "/command?product=created"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { product: "created" }), 303);
   } catch {
-    return NextResponse.redirect(publicUrl(request, "/command?product=duplicate"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { product: "duplicate" }), 303);
   }
 }

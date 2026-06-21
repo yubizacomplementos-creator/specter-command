@@ -12,7 +12,7 @@ type CommandShellProps = {
 const navItems = [
   ["Resumen", "/command"],
   ["Clientes", "/command/customers"],
-  ["Productos", "/command#productos"],
+  ["Productos", "/command/products"],
   ["Pedidos", "/command#pedidos"],
   ["Inventario", "/command#inventario"],
   ["Reportes", "/command#reportes"],

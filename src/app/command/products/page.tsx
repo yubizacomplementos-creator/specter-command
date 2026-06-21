@@ -1,0 +1,156 @@
+import { CommandShell } from "../_components/command-shell";
+import { requireSession } from "@/server/session";
+import { prisma } from "@/server/db";
+
+type ProductsPageProps = {
+  searchParams?: Promise<{
+    product?: string;
+    count?: string;
+    q?: string;
+  }>;
+};
+
+const productMessages = {
+  created: { tone: "success", text: "Producto registrado correctamente." },
+  invalid: { tone: "error", text: "Completa nombre y categoria." },
+  forbidden: { tone: "error", text: "Tu rol no permite registrar productos." },
+  duplicate: { tone: "error", text: "No pudimos registrar el producto. Revisa si el SKU ya existe." },
+  imported: { tone: "success", text: "Productos importados correctamente." },
+  import_invalid: { tone: "error", text: "El archivo CSV no tiene productos validos para importar." }
+} as const;
+
+export default async function ProductsPage({ searchParams }: ProductsPageProps) {
+  const session = await requireSession();
+  const params = await searchParams;
+  const searchTerm = params?.q?.trim() ?? "";
+  const message = params?.product
+    ? productMessages[params.product as keyof typeof productMessages]
+    : undefined;
+  const importCount = params?.count ? Number(params.count) : undefined;
+  const canManageProducts = session.role !== "VIEWER";
+  const where = {
+    companyId: session.company.id,
+    active: true,
+    deletedAt: null,
+    ...(searchTerm
+      ? {
+          OR: [
+            { name: { contains: searchTerm, mode: "insensitive" as const } },
+            { sku: { contains: searchTerm, mode: "insensitive" as const } },
+            { categoryKey: { contains: searchTerm, mode: "insensitive" as const } }
+          ]
+        }
+      : {})
+  };
+  const [products, productCount] = await Promise.all([
+    prisma.product.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 50
+    }),
+    prisma.product.count({ where })
+  ]);
+
+  return (
+    <CommandShell companyName={session.company.name} userEmail={session.user.email} role={session.role}>
+      <div className="mx-auto grid max-w-6xl gap-6">
+        <section className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-sm text-slate-500">Catalogo</p>
+              <h1 className="text-3xl font-semibold">Productos y servicios</h1>
+            </div>
+            <span className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-600">
+              {productCount} registrados
+            </span>
+          </div>
+
+          <form method="get" className="mt-5 grid gap-3 md:grid-cols-[1fr_auto_auto]">
+            <input
+              name="q"
+              defaultValue={searchTerm}
+              placeholder="Buscar por nombre, SKU o categoria"
+              className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600"
+            />
+            <button className="rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">
+              Buscar
+            </button>
+            <a href="/command/products" className="rounded-md border border-slate-200 px-4 py-2 text-center text-sm text-slate-600 hover:border-cyan-700 hover:text-cyan-700">
+              Limpiar
+            </a>
+          </form>
+
+          {message ? (
+            <p className={`mt-4 rounded-md border px-3 py-2 text-sm ${message.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}`}>
+              {message.text}
+              {params?.product === "imported" && importCount ? ` Total: ${importCount}.` : ""}
+            </p>
+          ) : null}
+        </section>
+
+        {canManageProducts ? (
+          <section className="grid gap-4 lg:grid-cols-2">
+            <form action="/api/products" method="post" className="rounded-lg border border-slate-200 bg-white p-5">
+              <h2 className="text-lg font-semibold">Registrar producto</h2>
+              <div className="mt-4 grid gap-3">
+                <input name="name" required minLength={2} placeholder="Nombre" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                <input name="sku" maxLength={60} placeholder="SKU opcional" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                <input name="categoryKey" required minLength={2} placeholder="Categoria" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                <div className="grid gap-2 rounded-md border border-slate-200 p-3 text-sm text-slate-600 sm:grid-cols-2">
+                  <label className="flex items-center gap-2"><input name="controlsStock" type="checkbox" /> Controla inventario</label>
+                  <label className="flex items-center gap-2"><input name="usableAsInput" type="checkbox" /> Puede ser insumo</label>
+                  <label className="flex items-center gap-2"><input name="requiresProduction" type="checkbox" /> Requiere produccion</label>
+                  <label className="flex items-center gap-2"><input name="notSellable" type="checkbox" /> No se vende directo</label>
+                </div>
+                <button className="rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">
+                  Guardar producto
+                </button>
+              </div>
+            </form>
+
+            <form action="/api/products/import" method="post" encType="multipart/form-data" className="rounded-lg border border-slate-200 bg-white p-5">
+              <h2 className="text-lg font-semibold">Cargue masivo CSV</h2>
+              <p className="mt-1 text-sm text-slate-500">Columnas: sku,nombre,categoria,controlaInventario,vendible,insumo,produccion.</p>
+              <div className="mt-4 grid gap-3">
+                <input name="csvFile" type="file" accept=".csv,text/csv" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+                <textarea name="csvText" rows={5} placeholder={'sku,nombre,categoria,controlaInventario,vendible,insumo,produccion\nSKU-001,Proteina vainilla,suplementos,si,si,no,no'} className="rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-cyan-600" />
+                <button className="rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">
+                  Importar productos
+                </button>
+              </div>
+            </form>
+          </section>
+        ) : null}
+
+        <section className="rounded-lg border border-slate-200 bg-white p-5">
+          <h2 className="text-lg font-semibold">Listado</h2>
+          <div className="mt-4 grid gap-3">
+            {products.length ? products.map((product) => (
+              <article key={product.id} className="rounded-md border border-slate-200 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold">{product.name}</h3>
+                    <p className="mt-1 text-sm text-slate-500">{product.categoryKey}</p>
+                  </div>
+                  {product.sku ? <span className="rounded-md bg-cyan-50 px-3 py-1 text-xs text-cyan-700">{product.sku}</span> : null}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span className={`rounded-md px-2 py-1 ${product.sellable ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                    {product.sellable ? "Vendible" : "No vendible"}
+                  </span>
+                  {product.controlsStock ? <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">Inventario</span> : null}
+                  {product.usableAsInput ? <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">Insumo</span> : null}
+                  {product.requiresProduction ? <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">Produccion</span> : null}
+                </div>
+              </article>
+            )) : (
+              <p className="rounded-md border border-dashed border-slate-200 p-4 text-sm text-slate-500">
+                No hay productos para mostrar.
+              </p>
+            )}
+          </div>
+        </section>
+      </div>
+    </CommandShell>
+  );
+}
