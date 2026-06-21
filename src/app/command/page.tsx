@@ -127,6 +127,22 @@ const orderMessages = {
     tone: "error",
     text: "No hay stock suficiente en la ubicacion principal para ese producto."
   },
+  closed: {
+    tone: "success",
+    text: "Pedido cerrado correctamente."
+  },
+  cancelled: {
+    tone: "success",
+    text: "Pedido cancelado correctamente. Si descontaba inventario, el stock fue devuelto."
+  },
+  invalid_status: {
+    tone: "error",
+    text: "Solo puedes cerrar o cancelar pedidos abiertos."
+  },
+  status_failed: {
+    tone: "error",
+    text: "No pudimos cambiar el estado del pedido."
+  },
   forbidden: {
     tone: "error",
     text: "Tu rol no permite registrar pedidos."
@@ -864,6 +880,24 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
                           </span>
                         ) : null}
                       </div>
+                      {canManageOrders && order.status === "OPEN" ? (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <form action="/api/orders/status" method="post">
+                            <input type="hidden" name="orderId" value={order.id} />
+                            <input type="hidden" name="status" value="CLOSED" />
+                            <button className="rounded border border-command-green/40 px-3 py-1 text-xs text-command-green hover:bg-command-green/10">
+                              Cerrar pedido
+                            </button>
+                          </form>
+                          <form action="/api/orders/status" method="post">
+                            <input type="hidden" name="orderId" value={order.id} />
+                            <input type="hidden" name="status" value="CANCELLED" />
+                            <button className="rounded border border-red-400/40 px-3 py-1 text-xs text-red-200 hover:bg-red-400/10">
+                              Cancelar y devolver stock
+                            </button>
+                          </form>
+                        </div>
+                      ) : null}
                     </article>
                   );
                 })}
