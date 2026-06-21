@@ -4,7 +4,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/server/audit";
 import { prisma } from "@/server/db";
 import { getCurrentSession } from "@/server/session";
-import { publicUrl } from "@/server/url";
+import { publicUrl, redirectBackUrl } from "@/server/url";
 
 const inventorySchema = z.object({
   productId: z.string().min(1),
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (session.role === MembershipRole.VIEWER) {
-    return NextResponse.redirect(publicUrl(request, "/command?inventory=forbidden"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { inventory: "forbidden" }), 303);
   }
 
   const form = await request.formData();
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!parsed.success) {
-    return NextResponse.redirect(publicUrl(request, "/command?inventory=invalid"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { inventory: "invalid" }), 303);
   }
 
   const product = await prisma.product.findFirst({
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!product) {
-    return NextResponse.redirect(publicUrl(request, "/command?inventory=invalid_product"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { inventory: "invalid_product" }), 303);
   }
 
   const normalizedLocation = locationKey(parsed.data.locationKey);
@@ -118,8 +118,8 @@ export async function POST(request: NextRequest) {
       userAgent: request.headers.get("user-agent") ?? undefined
     });
 
-    return NextResponse.redirect(publicUrl(request, "/command?inventory=updated"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { inventory: "updated" }), 303);
   } catch {
-    return NextResponse.redirect(publicUrl(request, "/command?inventory=failed"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { inventory: "failed" }), 303);
   }
 }

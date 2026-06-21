@@ -14,7 +14,7 @@ const navItems = [
   ["Clientes", "/command/customers"],
   ["Productos", "/command/products"],
   ["Pedidos", "/command/orders"],
-  ["Inventario", "/command#inventario"],
+  ["Inventario", "/command/inventory"],
   ["Reportes", "/command#reportes"],
   ["Integraciones", "/command#integraciones"]
 ] as const;
