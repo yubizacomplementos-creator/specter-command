@@ -13,6 +13,8 @@ type CommandPageProps = {
     inventory?: string;
     integration?: string;
     count?: string;
+    q?: string;
+    orderStatus?: string;
   }>;
 };
 
@@ -320,6 +322,11 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
     ? integrationMessages[params.integration as keyof typeof integrationMessages]
     : undefined;
   const canManageIntegrations = session.role === "OWNER" || session.role === "ADMIN";
+  const searchTerm = params?.q?.trim() ?? "";
+  const orderStatusFilter = params?.orderStatus?.trim() ?? "";
+  const validOrderStatusFilter = Object.values(OrderStatus).includes(orderStatusFilter as OrderStatus)
+    ? (orderStatusFilter as OrderStatus)
+    : undefined;
   const enabledModules = await prisma.companyModule.findMany({
     where: { companyId: session.company.id },
     include: { module: true },
@@ -339,7 +346,17 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
       where: {
         companyId: session.company.id,
         active: true,
-        deletedAt: null
+        deletedAt: null,
+        ...(searchTerm
+          ? {
+              OR: [
+                { name: { contains: searchTerm, mode: "insensitive" } },
+                { email: { contains: searchTerm, mode: "insensitive" } },
+                { phone: { contains: searchTerm, mode: "insensitive" } },
+                { code: { contains: searchTerm, mode: "insensitive" } }
+              ]
+            }
+          : {})
       },
       orderBy: { createdAt: "desc" },
       take: 8
@@ -348,7 +365,17 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
       where: {
         companyId: session.company.id,
         active: true,
-        deletedAt: null
+        deletedAt: null,
+        ...(searchTerm
+          ? {
+              OR: [
+                { name: { contains: searchTerm, mode: "insensitive" } },
+                { email: { contains: searchTerm, mode: "insensitive" } },
+                { phone: { contains: searchTerm, mode: "insensitive" } },
+                { code: { contains: searchTerm, mode: "insensitive" } }
+              ]
+            }
+          : {})
       }
     })
   ]);
@@ -357,7 +384,16 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
       where: {
         companyId: session.company.id,
         active: true,
-        deletedAt: null
+        deletedAt: null,
+        ...(searchTerm
+          ? {
+              OR: [
+                { name: { contains: searchTerm, mode: "insensitive" } },
+                { sku: { contains: searchTerm, mode: "insensitive" } },
+                { categoryKey: { contains: searchTerm, mode: "insensitive" } }
+              ]
+            }
+          : {})
       },
       orderBy: { createdAt: "desc" },
       take: 8
@@ -366,7 +402,16 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
       where: {
         companyId: session.company.id,
         active: true,
-        deletedAt: null
+        deletedAt: null,
+        ...(searchTerm
+          ? {
+              OR: [
+                { name: { contains: searchTerm, mode: "insensitive" } },
+                { sku: { contains: searchTerm, mode: "insensitive" } },
+                { categoryKey: { contains: searchTerm, mode: "insensitive" } }
+              ]
+            }
+          : {})
       }
     })
   ]);
@@ -377,7 +422,16 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
       where: {
         companyId: session.company.id,
         active: true,
-        deletedAt: null
+        deletedAt: null,
+        ...(validOrderStatusFilter ? { status: validOrderStatusFilter } : {}),
+        ...(searchTerm
+          ? {
+              OR: [
+                { code: { contains: searchTerm, mode: "insensitive" } },
+                { customer: { name: { contains: searchTerm, mode: "insensitive" } } }
+              ]
+            }
+          : {})
       },
       include: {
         customer: true,
@@ -393,7 +447,16 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
       where: {
         companyId: session.company.id,
         active: true,
-        deletedAt: null
+        deletedAt: null,
+        ...(validOrderStatusFilter ? { status: validOrderStatusFilter } : {}),
+        ...(searchTerm
+          ? {
+              OR: [
+                { code: { contains: searchTerm, mode: "insensitive" } },
+                { customer: { name: { contains: searchTerm, mode: "insensitive" } } }
+              ]
+            }
+          : {})
       }
     })
   ]);
@@ -402,7 +465,16 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
       where: {
         companyId: session.company.id,
         active: true,
-        deletedAt: null
+        deletedAt: null,
+        ...(searchTerm
+          ? {
+              OR: [
+                { locationKey: { contains: searchTerm, mode: "insensitive" } },
+                { product: { name: { contains: searchTerm, mode: "insensitive" } } },
+                { product: { sku: { contains: searchTerm, mode: "insensitive" } } }
+              ]
+            }
+          : {})
       },
       include: { product: true },
       orderBy: { updatedAt: "desc" },
@@ -412,7 +484,16 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
       where: {
         companyId: session.company.id,
         active: true,
-        deletedAt: null
+        deletedAt: null,
+        ...(searchTerm
+          ? {
+              OR: [
+                { locationKey: { contains: searchTerm, mode: "insensitive" } },
+                { product: { name: { contains: searchTerm, mode: "insensitive" } } },
+                { product: { sku: { contains: searchTerm, mode: "insensitive" } } }
+              ]
+            }
+          : {})
       }
     })
   ]);
@@ -592,6 +673,38 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
               Multiempresa activo
             </span>
           </div>
+
+          <form method="get" className="mb-6 grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4 md:grid-cols-[1fr_180px_auto_auto]">
+            <label className="grid gap-2 text-sm text-slate-300">
+              Buscar
+              <input
+                name="q"
+                defaultValue={searchTerm}
+                placeholder="cliente, producto, SKU, pedido, ubicacion"
+                className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+              />
+            </label>
+            <label className="grid gap-2 text-sm text-slate-300">
+              Estado pedido
+              <select
+                name="orderStatus"
+                defaultValue={validOrderStatusFilter ?? ""}
+                className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+              >
+                <option value="">Todos</option>
+                <option value={OrderStatus.OPEN}>Abiertos</option>
+                <option value={OrderStatus.CLOSED}>Cerrados</option>
+                <option value={OrderStatus.CANCELLED}>Cancelados</option>
+                <option value={OrderStatus.DRAFT}>Borradores</option>
+              </select>
+            </label>
+            <button className="self-end rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white">
+              Filtrar
+            </button>
+            <a href="/command" className="self-end rounded border border-white/15 px-4 py-2 text-center text-sm text-slate-200 hover:border-command-cyan hover:text-command-cyan">
+              Limpiar
+            </a>
+          </form>
 
           <div className="grid gap-4 md:grid-cols-2">
             {commandModules.map((module) => {
