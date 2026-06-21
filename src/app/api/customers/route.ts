@@ -4,7 +4,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/server/audit";
 import { prisma } from "@/server/db";
 import { getCurrentSession } from "@/server/session";
-import { publicUrl } from "@/server/url";
+import { publicUrl, redirectBackUrl } from "@/server/url";
 
 const customerSchema = z.object({
   code: z.string().max(40).optional(),
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (session.role === MembershipRole.VIEWER) {
-    return NextResponse.redirect(publicUrl(request, "/command?customer=forbidden"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { customer: "forbidden" }), 303);
   }
 
   const form = await request.formData();
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!parsed.success) {
-    return NextResponse.redirect(publicUrl(request, "/command?customer=invalid"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { customer: "invalid" }), 303);
   }
 
   const tags = (parsed.data.tags ?? "")
@@ -87,8 +87,8 @@ export async function POST(request: NextRequest) {
       userAgent: request.headers.get("user-agent") ?? undefined
     });
 
-    return NextResponse.redirect(publicUrl(request, "/command?customer=created"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { customer: "created" }), 303);
   } catch {
-    return NextResponse.redirect(publicUrl(request, "/command?customer=duplicate"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { customer: "duplicate" }), 303);
   }
 }

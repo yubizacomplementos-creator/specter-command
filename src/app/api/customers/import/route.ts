@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeAuditLog } from "@/server/audit";
 import { prisma } from "@/server/db";
 import { getCurrentSession } from "@/server/session";
-import { publicUrl } from "@/server/url";
+import { publicUrl, redirectBackUrl } from "@/server/url";
 
 type CustomerImportRow = {
   code?: string;
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (session.role === MembershipRole.VIEWER) {
-    return NextResponse.redirect(publicUrl(request, "/command?customer=forbidden"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { customer: "forbidden" }), 303);
   }
 
   const form = await request.formData();
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
   const rows = parseCustomersCsv(csv);
 
   if (!rows.length) {
-    return NextResponse.redirect(publicUrl(request, "/command?customer=import_invalid"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { customer: "import_invalid" }), 303);
   }
 
   let imported = 0;
@@ -187,5 +187,5 @@ export async function POST(request: NextRequest) {
     userAgent: request.headers.get("user-agent") ?? undefined
   });
 
-  return NextResponse.redirect(publicUrl(request, `/command?customer=imported&count=${imported}`), 303);
+  return NextResponse.redirect(redirectBackUrl(request, "/command", { customer: "imported", count: imported }), 303);
 }

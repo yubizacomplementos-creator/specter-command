@@ -15,3 +15,20 @@ export function publicUrl(request: NextRequest, path: string) {
 
   return new URL(path, `${protocol}://${host}`);
 }
+
+export function redirectBackUrl(request: NextRequest, fallbackPath: string, params: Record<string, string | number>) {
+  const referer = request.headers.get("referer");
+  const fallback = publicUrl(request, fallbackPath);
+  const target = referer ? new URL(referer) : fallback;
+  const appUrl = publicUrl(request, "/");
+
+  if (target.origin !== appUrl.origin) {
+    return fallback;
+  }
+
+  for (const [key, value] of Object.entries(params)) {
+    target.searchParams.set(key, String(value));
+  }
+
+  return target;
+}
