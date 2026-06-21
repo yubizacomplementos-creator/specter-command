@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     after: { email: user.email }
   });
 
-  const response = NextResponse.redirect(publicUrl(request, "/command"), 303);
+  const response = NextResponse.redirect(publicUrl(request, "/profiles"), 303);
   response.cookies.set(sessionCookieName, token, {
     httpOnly: true,
     sameSite: "lax",

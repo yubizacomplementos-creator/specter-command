@@ -48,6 +48,9 @@ export function CommandShell({ children, companyName, userEmail, role }: Command
               Salir
             </button>
           </form>
+          <a href="/profiles" className="mt-3 block rounded-md border border-slate-200 px-3 py-2 text-center text-sm text-slate-700 hover:border-cyan-600 hover:text-cyan-700">
+            Cambiar negocio
+          </a>
         </aside>
 
         <section>

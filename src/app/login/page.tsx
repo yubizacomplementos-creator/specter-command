@@ -10,7 +10,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
 
   if (session) {
-    redirect("/command");
+    redirect("/profiles");
   }
 
   return (
