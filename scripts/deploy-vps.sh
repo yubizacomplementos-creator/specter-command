@@ -4,8 +4,11 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/var/www/specter-command}"
 
 cd "${APP_DIR}"
+set -a
+. ./.env.production
+set +a
 
-npm ci
+npm install
 npm run prisma:deploy
 npm run build
 pm2 startOrReload ecosystem.config.cjs --env production

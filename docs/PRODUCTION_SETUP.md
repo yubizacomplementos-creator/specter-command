@@ -45,7 +45,7 @@ En el VPS:
 ```bash
 sudo bash scripts/setup-vps.sh
 cd /var/www/specter-command
-npm ci
+npm install
 npm run prisma:deploy
 npm run build
 pm2 startOrReload ecosystem.config.cjs --env production
