@@ -2,8 +2,33 @@ import { commandModules } from "@/lib/modules";
 import { requireSession } from "@/server/session";
 import { prisma } from "@/server/db";
 
-export default async function CommandPage() {
+type CommandPageProps = {
+  searchParams?: Promise<{
+    password?: string;
+  }>;
+};
+
+const passwordMessages = {
+  updated: {
+    tone: "success",
+    text: "Contrasena actualizada correctamente."
+  },
+  invalid: {
+    tone: "error",
+    text: "La nueva contrasena debe tener minimo 12 caracteres, coincidir en ambos campos y ser distinta a la actual."
+  },
+  credentials: {
+    tone: "error",
+    text: "La contrasena actual no coincide."
+  }
+} as const;
+
+export default async function CommandPage({ searchParams }: CommandPageProps) {
   const session = await requireSession();
+  const params = await searchParams;
+  const passwordMessage = params?.password
+    ? passwordMessages[params.password as keyof typeof passwordMessages]
+    : undefined;
   const enabledModules = await prisma.companyModule.findMany({
     where: { companyId: session.company.id },
     include: { module: true },
@@ -44,6 +69,58 @@ export default async function CommandPage() {
                 <strong className="text-right text-white">{value}</strong>
               </div>
             ))}
+          </div>
+
+          <div className="mt-6 border-t border-white/10 pt-5">
+            <h2 className="text-lg font-semibold">Seguridad</h2>
+            {passwordMessage ? (
+              <p
+                className={`mt-3 rounded border px-3 py-2 text-sm ${
+                  passwordMessage.tone === "success"
+                    ? "border-command-green/40 bg-command-green/10 text-command-green"
+                    : "border-red-400/40 bg-red-400/10 text-red-200"
+                }`}
+              >
+                {passwordMessage.text}
+              </p>
+            ) : null}
+            <form action="/api/account/password" method="post" className="mt-4 grid gap-3">
+              <label className="grid gap-2 text-sm text-slate-300">
+                Contrasena actual
+                <input
+                  name="currentPassword"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                />
+              </label>
+              <label className="grid gap-2 text-sm text-slate-300">
+                Nueva contrasena
+                <input
+                  name="newPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={12}
+                  required
+                  className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                />
+              </label>
+              <label className="grid gap-2 text-sm text-slate-300">
+                Confirmar contrasena
+                <input
+                  name="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={12}
+                  required
+                  className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                />
+              </label>
+              <button className="rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white">
+                Actualizar contrasena
+              </button>
+            </form>
           </div>
         </aside>
 
