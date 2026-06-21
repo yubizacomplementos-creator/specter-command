@@ -8,7 +8,7 @@ set -a
 . ./.env.production
 set +a
 
-npm install
+npm install --include=dev
 npm run prisma:deploy
 npm run build
 pm2 startOrReload ecosystem.config.cjs --env production
