@@ -1,6 +1,7 @@
 import { commandModules } from "@/lib/modules";
 import { requireSession } from "@/server/session";
 import { prisma } from "@/server/db";
+import { OrderStatus } from "@prisma/client";
 
 type CommandPageProps = {
   searchParams?: Promise<{
@@ -333,6 +334,64 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
       }
     })
   ]);
+  const [closedSales, openSales, cancelledOrderCount, statusCounts, inventorySnapshot] = await Promise.all([
+    prisma.order.aggregate({
+      where: {
+        companyId: session.company.id,
+        status: OrderStatus.CLOSED,
+        active: true,
+        deletedAt: null
+      },
+      _sum: { total: true },
+      _count: { id: true }
+    }),
+    prisma.order.aggregate({
+      where: {
+        companyId: session.company.id,
+        status: OrderStatus.OPEN,
+        active: true,
+        deletedAt: null
+      },
+      _sum: { total: true },
+      _count: { id: true }
+    }),
+    prisma.order.count({
+      where: {
+        companyId: session.company.id,
+        status: OrderStatus.CANCELLED,
+        active: true,
+        deletedAt: null
+      }
+    }),
+    prisma.order.groupBy({
+      by: ["status"],
+      where: {
+        companyId: session.company.id,
+        active: true,
+        deletedAt: null
+      },
+      _count: { id: true }
+    }),
+    prisma.inventoryItem.findMany({
+      where: {
+        companyId: session.company.id,
+        active: true,
+        deletedAt: null
+      },
+      include: { product: true },
+      take: 200
+    })
+  ]);
+  const statusCountMap = new Map(statusCounts.map((item) => [item.status, item._count.id]));
+  const inventoryValue = inventorySnapshot.reduce((total, item) => {
+    const quantity = Number(item.quantity.toString());
+    const unitCost = item.unitCost ? Number(item.unitCost.toString()) : 0;
+    return total + quantity * unitCost;
+  }, 0);
+  const lowStockItems = inventorySnapshot
+    .filter((item) => Number(item.quantity.toString()) <= 5)
+    .sort((a, b) => Number(a.quantity.toString()) - Number(b.quantity.toString()))
+    .slice(0, 5);
 
   const moduleState = new Map(enabledModules.map((item) => [item.module.key, item.enabled]));
 
@@ -451,6 +510,66 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
                 </article>
               );
             })}
+          </div>
+
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-sm text-slate-400">Reportes</p>
+                <h2 className="text-2xl font-semibold">Pulso operativo</h2>
+              </div>
+              <span className="rounded border border-command-cyan/40 bg-command-cyan/10 px-3 py-1 text-sm text-command-cyan">
+                Tiempo real
+              </span>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <article className="rounded border border-white/10 bg-white/[0.035] p-4">
+                <p className="text-sm text-slate-400">Ventas cerradas</p>
+                <h3 className="mt-2 text-2xl font-semibold text-command-green">
+                  {money(closedSales._sum.total ?? 0)}
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">{closedSales._count.id} pedidos cerrados</p>
+              </article>
+              <article className="rounded border border-white/10 bg-white/[0.035] p-4">
+                <p className="text-sm text-slate-400">Pedidos abiertos</p>
+                <h3 className="mt-2 text-2xl font-semibold text-command-cyan">
+                  {money(openSales._sum.total ?? 0)}
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">{openSales._count.id} pendientes por cerrar</p>
+              </article>
+              <article className="rounded border border-white/10 bg-white/[0.035] p-4">
+                <p className="text-sm text-slate-400">Inventario valorizado</p>
+                <h3 className="mt-2 text-2xl font-semibold">{money(inventoryValue)}</h3>
+                <p className="mt-1 text-xs text-slate-500">{inventoryCount} existencias registradas</p>
+              </article>
+              <article className="rounded border border-white/10 bg-white/[0.035] p-4">
+                <p className="text-sm text-slate-400">Cancelaciones</p>
+                <h3 className="mt-2 text-2xl font-semibold text-red-200">{cancelledOrderCount}</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {statusCountMap.get(OrderStatus.OPEN) ?? 0} abiertos · {statusCountMap.get(OrderStatus.CLOSED) ?? 0} cerrados
+                </p>
+              </article>
+            </div>
+
+            <div className="mt-4 rounded border border-white/10 bg-white/[0.035] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-semibold">Alertas de stock bajo</h3>
+                <span className="text-xs text-slate-400">Umbral: 5 unidades</span>
+              </div>
+              {lowStockItems.length ? (
+                <div className="mt-3 grid gap-2">
+                  {lowStockItems.map((item) => (
+                    <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded bg-command-ink px-3 py-2 text-sm">
+                      <span className="text-slate-200">{item.product.name}</span>
+                      <span className="text-red-200">{item.quantity.toString()} en {item.locationKey}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-400">Sin alertas de stock bajo.</p>
+              )}
+            </div>
           </div>
 
           <div className="mt-8 border-t border-white/10 pt-6">
