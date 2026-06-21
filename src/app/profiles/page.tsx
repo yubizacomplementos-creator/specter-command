@@ -11,12 +11,11 @@ type ProfilesPageProps = {
 
 const profileMessages = {
   limit: "Puedes tener hasta 3 negocios por usuario.",
-  invalid: "No pudimos crear el negocio. Revisa el nombre.",
+  invalid: "Completa el nombre y las preguntas del negocio.",
   forbidden: "No tienes acceso a ese negocio.",
   deleted: "Negocio eliminado correctamente.",
   delete_invalid: "No pudimos identificar el negocio a eliminar.",
   delete_forbidden: "Solo un administrador o dueño puede eliminar ese negocio.",
-  delete_last: "No puedes eliminar tu último negocio activo.",
   delete_password: "La contraseña no coincide.",
   delete_confirm: "Debes escribir ELIMINAR para confirmar."
 } as const;
@@ -64,7 +63,7 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {memberships.map((membership) => {
-            const canDelete = (membership.role === "OWNER" || membership.role === "ADMIN") && memberships.length > 1;
+            const canDelete = membership.role === "OWNER" || membership.role === "ADMIN";
             return (
               <div key={membership.id} className="grid gap-2">
                 <form action="/api/profiles/select" method="post">
@@ -106,19 +105,51 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
           })}
 
           {canCreate ? (
-            <form action="/api/profiles/create" method="post" className="grid aspect-square rounded-lg border border-dashed border-white/20 bg-white/[0.03] p-5">
-              <div className="grid place-items-center text-center">
-                <span className="grid h-20 w-20 place-items-center rounded-lg border border-cyan-300/40 text-4xl text-cyan-300">+</span>
-                <strong className="mt-4 block text-lg">Agregar negocio</strong>
+            <form action="/api/profiles/create" method="post" className="rounded-lg border border-dashed border-white/20 bg-white/[0.03] p-5">
+              <div className="grid gap-3">
+                <div className="text-center">
+                  <span className="mx-auto grid h-16 w-16 place-items-center rounded-lg border border-cyan-300/40 text-4xl text-cyan-300">+</span>
+                  <strong className="mt-4 block text-lg">Agregar negocio</strong>
+                </div>
                 <input
                   name="name"
                   required
                   minLength={2}
                   maxLength={80}
                   placeholder="Nombre del negocio"
-                  className="mt-4 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-cyan-300"
+                  className="rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-cyan-300"
                 />
-                <button className="mt-3 rounded-md bg-cyan-300 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-200">
+                <select name="businessType" required className="rounded-md border border-white/10 bg-[#101827] px-3 py-2 text-sm text-white outline-none focus:border-cyan-300">
+                  <option value="">¿A qué se dedica?</option>
+                  <option value="moda-accesorios">Moda y accesorios</option>
+                  <option value="suplementos">Suplementos / bienestar</option>
+                  <option value="tecnologia">Tecnología</option>
+                  <option value="servicios">Servicios</option>
+                  <option value="comida">Comida / alimentos</option>
+                  <option value="otro">Otro</option>
+                </select>
+                <select name="salesChannel" required className="rounded-md border border-white/10 bg-[#101827] px-3 py-2 text-sm text-white outline-none focus:border-cyan-300">
+                  <option value="">Canal principal</option>
+                  <option value="tienda-fisica">Tienda física</option>
+                  <option value="shopify">Shopify</option>
+                  <option value="redes-sociales">Redes sociales</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="mixto">Mixto</option>
+                </select>
+                <select name="country" required className="rounded-md border border-white/10 bg-[#101827] px-3 py-2 text-sm text-white outline-none focus:border-cyan-300">
+                  <option value="">País principal</option>
+                  <option value="Colombia">Colombia</option>
+                  <option value="Estados Unidos">Estados Unidos</option>
+                  <option value="México">México</option>
+                  <option value="Otro">Otro</option>
+                </select>
+                <select name="currency" required defaultValue="COP" className="rounded-md border border-white/10 bg-[#101827] px-3 py-2 text-sm text-white outline-none focus:border-cyan-300">
+                  <option value="COP">COP</option>
+                  <option value="USD">USD</option>
+                  <option value="MXN">MXN</option>
+                  <option value="EUR">EUR</option>
+                </select>
+                <button className="rounded-md bg-cyan-300 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-200">
                   Crear
                 </button>
               </div>

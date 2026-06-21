@@ -7,7 +7,11 @@ import { getCurrentSession } from "@/server/session";
 import { publicUrl } from "@/server/url";
 
 const createSchema = z.object({
-  name: z.string().min(2).max(80)
+  name: z.string().min(2).max(80),
+  businessType: z.string().min(2).max(80),
+  salesChannel: z.string().min(2).max(80),
+  country: z.string().min(2).max(80),
+  currency: z.string().min(3).max(3)
 });
 
 function slug(value: string) {
@@ -30,7 +34,11 @@ export async function POST(request: NextRequest) {
 
   const form = await request.formData();
   const parsed = createSchema.safeParse({
-    name: form.get("name")
+    name: form.get("name"),
+    businessType: form.get("businessType"),
+    salesChannel: form.get("salesChannel"),
+    country: form.get("country"),
+    currency: form.get("currency")
   });
 
   if (!parsed.success) {
@@ -69,7 +77,13 @@ export async function POST(request: NextRequest) {
         slug: candidate,
         brand: {
           primaryColor: "#22d3ee",
-          commandMode: true
+          commandMode: true,
+          onboarding: {
+            businessType: parsed.data.businessType,
+            salesChannel: parsed.data.salesChannel,
+            country: parsed.data.country,
+            currency: parsed.data.currency.toUpperCase()
+          }
         },
         memberships: {
           create: {
@@ -89,7 +103,11 @@ export async function POST(request: NextRequest) {
           moduleId: module.id,
           enabled: true,
           enabledAt: new Date(),
-          settings: { configurable: true }
+          settings: {
+            configurable: true,
+            businessType: parsed.data.businessType,
+            salesChannel: parsed.data.salesChannel
+          }
         }
       });
     }
@@ -103,7 +121,14 @@ export async function POST(request: NextRequest) {
     action: AuditAction.CREATE,
     entityType: "Company",
     entityId: company.id,
-    after: { name: company.name, slug: company.slug }
+    after: {
+      name: company.name,
+      slug: company.slug,
+      businessType: parsed.data.businessType,
+      salesChannel: parsed.data.salesChannel,
+      country: parsed.data.country,
+      currency: parsed.data.currency.toUpperCase()
+    }
   });
 
   return NextResponse.redirect(publicUrl(request, "/profiles"), 303);

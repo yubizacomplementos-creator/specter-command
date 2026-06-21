@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.redirect(publicUrl(request, "/profiles?profile=delete_confirm"), 303);
   }
 
-  const [membership, activeCount, user] = await Promise.all([
+  const [membership, user] = await Promise.all([
     prisma.membership.findFirst({
       where: {
         userId: session.user.id,
@@ -50,17 +50,6 @@ export async function POST(request: NextRequest) {
       },
       include: { company: true }
     }),
-    prisma.membership.count({
-      where: {
-        userId: session.user.id,
-        active: true,
-        deletedAt: null,
-        company: {
-          active: true,
-          deletedAt: null
-        }
-      }
-    }),
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: { passwordHash: true }
@@ -69,10 +58,6 @@ export async function POST(request: NextRequest) {
 
   if (!membership) {
     return NextResponse.redirect(publicUrl(request, "/profiles?profile=delete_forbidden"), 303);
-  }
-
-  if (activeCount <= 1) {
-    return NextResponse.redirect(publicUrl(request, "/profiles?profile=delete_last"), 303);
   }
 
   const passwordOk = user ? await bcrypt.compare(parsed.data.password, user.passwordHash) : false;
