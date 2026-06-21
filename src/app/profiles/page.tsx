@@ -11,7 +11,11 @@ type ProfilesPageProps = {
 const profileMessages = {
   limit: "Puedes tener hasta 3 negocios por usuario.",
   invalid: "No pudimos crear el negocio. Revisa el nombre.",
-  forbidden: "No tienes acceso a ese negocio."
+  forbidden: "No tienes acceso a ese negocio.",
+  deleted: "Negocio eliminado correctamente.",
+  delete_invalid: "No pudimos identificar el negocio a eliminar.",
+  delete_forbidden: "Solo el dueño puede eliminar ese negocio.",
+  delete_last: "No puedes eliminar tu ultimo negocio activo."
 } as const;
 
 export default async function ProfilesPage({ searchParams }: ProfilesPageProps) {
@@ -57,18 +61,28 @@ export default async function ProfilesPage({ searchParams }: ProfilesPageProps) 
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {memberships.map((membership) => (
-            <form key={membership.id} action="/api/profiles/select" method="post">
-              <input type="hidden" name="companyId" value={membership.companyId} />
-              <button className="group grid aspect-square w-full place-items-center rounded-lg border border-white/10 bg-white/[0.04] p-5 text-center transition hover:border-cyan-300 hover:bg-cyan-300/10">
-                <span className="grid h-20 w-20 place-items-center rounded-lg bg-cyan-300 text-3xl font-semibold text-slate-950">
-                  {membership.company.name.slice(0, 1).toUpperCase()}
-                </span>
-                <span>
-                  <strong className="mt-4 block text-lg">{membership.company.name}</strong>
-                  <span className="mt-1 block text-sm text-slate-400">{membership.role}</span>
-                </span>
-              </button>
-            </form>
+            <div key={membership.id} className="grid gap-2">
+              <form action="/api/profiles/select" method="post">
+                <input type="hidden" name="companyId" value={membership.companyId} />
+                <button className="group grid aspect-square w-full place-items-center rounded-lg border border-white/10 bg-white/[0.04] p-5 text-center transition hover:border-cyan-300 hover:bg-cyan-300/10">
+                  <span className="grid h-20 w-20 place-items-center rounded-lg bg-cyan-300 text-3xl font-semibold text-slate-950">
+                    {membership.company.name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span>
+                    <strong className="mt-4 block text-lg">{membership.company.name}</strong>
+                    <span className="mt-1 block text-sm text-slate-400">{membership.role}</span>
+                  </span>
+                </button>
+              </form>
+              {membership.role === "OWNER" && memberships.length > 1 ? (
+                <form action="/api/profiles/delete" method="post">
+                  <input type="hidden" name="companyId" value={membership.companyId} />
+                  <button className="w-full rounded-md border border-red-400/30 px-3 py-2 text-sm text-red-200 hover:border-red-300 hover:bg-red-400/10">
+                    Eliminar negocio
+                  </button>
+                </form>
+              ) : null}
+            </div>
           ))}
 
           {canCreate ? (
