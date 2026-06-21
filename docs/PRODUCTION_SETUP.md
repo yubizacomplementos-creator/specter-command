@@ -1,0 +1,79 @@
+# Puesta en produccion para spectercommand.com
+
+## Servicios contratados
+
+- GoDaddy: compra del dominio.
+- Cloudflare: DNS, SSL, CDN y seguridad.
+- Hostinger: VPS Linux.
+- GitHub: repositorio y CI.
+- Cloudflare R2: archivos y backups externos.
+- Resend: correos transaccionales.
+- Sentry: errores y monitoreo.
+- OpenAI: IA opcional.
+- Wompi: pagos.
+
+## DNS requerido en Cloudflare
+
+Cuando tengas la IP publica del VPS de Hostinger:
+
+| Tipo | Nombre | Valor |
+| --- | --- | --- |
+| A | `@` | `IP_DEL_VPS_HOSTINGER` |
+| CNAME | `www` | `spectercommand.com` |
+| CNAME | `files` | dominio publico de R2, si se usara publico |
+| TXT | `@` | SPF indicado por Resend |
+| TXT | claves DKIM | valores indicados por Resend |
+| TXT | `_dmarc` | `v=DMARC1; p=quarantine; rua=mailto:admin@spectercommand.com` |
+
+En Cloudflare usa SSL/TLS en modo `Full (strict)` cuando el servidor tenga certificado valido.
+
+## Variables de produccion
+
+Copia `.env.production.example` a `.env.production` en el VPS y reemplaza todos los valores.
+Nunca subas `.env.production` a GitHub.
+
+## Despliegue VPS
+
+En el VPS:
+
+```bash
+sudo bash scripts/setup-vps.sh
+cd /var/www/specter-command
+npm ci
+npm run prisma:deploy
+npm run build
+pm2 startOrReload ecosystem.config.cjs --env production
+pm2 save
+```
+
+## Nginx
+
+Puedes copiar `infra/nginx.spectercommand.com.conf` a:
+
+```bash
+/etc/nginx/sites-available/spectercommand.com
+```
+
+Luego:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/spectercommand.com /etc/nginx/sites-enabled/spectercommand.com
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Para SSL con Nginx instala Certbot o usa Cloudflare Origin Certificate. Con Caddy puedes usar `infra/Caddyfile`.
+
+## GitHub
+
+Crear un repositorio llamado `specter-command`, subir este proyecto y dejar CI activo.
+
+## Backups
+
+Configura cron:
+
+```bash
+0 3 * * * cd /var/www/specter-command && /usr/bin/env bash scripts/backup-postgres.sh
+```
+
+Despues se debe subir el dump a Cloudflare R2 con `rclone` o AWS CLI compatible S3.

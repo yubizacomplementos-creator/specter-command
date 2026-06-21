@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: specter-command-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: specter
+      POSTGRES_PASSWORD: specter
+      POSTGRES_DB: specter_command
+    ports:
+      - "5432:5432"
+    volumes:
+      - specter_postgres:/var/lib/postgresql/data
+
+volumes:
+  specter_postgres:

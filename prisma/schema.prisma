@@ -1,0 +1,417 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  RESTORE
+  LOGIN
+  EXPORT
+  MODULE_ENABLE
+  MODULE_DISABLE
+  AUTOMATION_RUN
+}
+
+enum AttributeType {
+  TEXT
+  NUMBER
+  MONEY
+  BOOLEAN
+  DATE
+  SELECT
+  MULTI_SELECT
+  JSON
+}
+
+enum OrderStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum BackupStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model Company {
+  id              String            @id @default(cuid())
+  name            String
+  legalName       String?
+  slug            String            @unique
+  domain          String?           @unique
+  slogan          String?
+  logoUrl         String?
+  brand           Json              @default("{}")
+  active          Boolean           @default(true)
+  deletedAt       DateTime?
+  deletedById     String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  memberships     Membership[]
+  modules         CompanyModule[]
+  configEntities  ConfigEntity[]
+  configOptions   ConfigOption[]
+  customers       Customer[]
+  products        Product[]
+  inventoryItems  InventoryItem[]
+  orders          Order[]
+  automationRules AutomationRule[]
+  auditLogs       AuditLog[]
+  backupJobs      BackupJob[]
+
+  @@index([active, deletedAt])
+}
+
+model User {
+  id              String        @id @default(cuid())
+  email           String        @unique
+  name            String
+  passwordHash    String
+  active          Boolean       @default(true)
+  deletedAt       DateTime?
+  deletedById     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  memberships     Membership[]
+  auditLogs       AuditLog[]     @relation("AuditActor")
+  createdOrders   Order[]        @relation("OrderCreatedBy")
+  updatedOrders   Order[]        @relation("OrderUpdatedBy")
+}
+
+model Membership {
+  id          String         @id @default(cuid())
+  companyId   String
+  userId      String
+  role        MembershipRole @default(OPERATOR)
+  permissions Json           @default("{}")
+  active      Boolean        @default(true)
+  deletedAt   DateTime?
+  deletedById String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  company     Company        @relation(fields: [companyId], references: [id])
+  user        User           @relation(fields: [userId], references: [id])
+
+  @@unique([companyId, userId])
+  @@index([companyId, active, deletedAt])
+}
+
+model ModuleDefinition {
+  id          String          @id @default(cuid())
+  key         String          @unique
+  name        String
+  description String?
+  version     String          @default("1.0.0")
+  capabilities Json           @default("{}")
+  active      Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  companies   CompanyModule[]
+}
+
+model CompanyModule {
+  id          String           @id @default(cuid())
+  companyId   String
+  moduleId    String
+  enabled     Boolean          @default(false)
+  settings    Json             @default("{}")
+  enabledAt   DateTime?
+  disabledAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  company     Company          @relation(fields: [companyId], references: [id])
+  module      ModuleDefinition @relation(fields: [moduleId], references: [id])
+
+  @@unique([companyId, moduleId])
+  @@index([companyId, enabled])
+}
+
+model ConfigEntity {
+  id          String            @id @default(cuid())
+  companyId   String
+  moduleKey   String
+  key         String
+  name        String
+  description String?
+  schema      Json              @default("{}")
+  active      Boolean           @default(true)
+  deletedAt   DateTime?
+  deletedById String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  company     Company           @relation(fields: [companyId], references: [id])
+  attributes  ConfigAttribute[]
+  records     BusinessRecord[]
+
+  @@unique([companyId, moduleKey, key])
+  @@index([companyId, active, deletedAt])
+}
+
+model ConfigAttribute {
+  id             String        @id @default(cuid())
+  configEntityId String
+  key            String
+  name           String
+  type           AttributeType
+  required       Boolean       @default(false)
+  searchable     Boolean       @default(false)
+  settings       Json          @default("{}")
+  active         Boolean       @default(true)
+  deletedAt      DateTime?
+  deletedById    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  entity         ConfigEntity  @relation(fields: [configEntityId], references: [id])
+
+  @@unique([configEntityId, key])
+}
+
+model ConfigOption {
+  id          String    @id @default(cuid())
+  companyId   String
+  group       String
+  key         String
+  label       String
+  metadata    Json      @default("{}")
+  sortOrder   Int       @default(0)
+  active      Boolean   @default(true)
+  deletedAt   DateTime?
+  deletedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company     Company   @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, group, key])
+  @@index([companyId, group, active])
+}
+
+model BusinessRecord {
+  id             String       @id @default(cuid())
+  companyId      String
+  configEntityId String
+  moduleKey      String
+  entityKey      String
+  displayName    String
+  data           Json         @default("{}")
+  active         Boolean      @default(true)
+  deletedAt      DateTime?
+  deletedById    String?
+  createdById    String?
+  updatedById    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  entity         ConfigEntity @relation(fields: [configEntityId], references: [id])
+
+  @@index([companyId, moduleKey, entityKey, active, deletedAt])
+}
+
+model Customer {
+  id          String    @id @default(cuid())
+  companyId   String
+  code        String?
+  name        String
+  email       String?
+  phone       String?
+  tags        String[]  @default([])
+  attributes  Json      @default("{}")
+  active      Boolean   @default(true)
+  deletedAt   DateTime?
+  deletedById String?
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company     Company   @relation(fields: [companyId], references: [id])
+  orders      Order[]
+
+  @@unique([companyId, code])
+  @@index([companyId, name])
+  @@index([companyId, active, deletedAt])
+}
+
+model Product {
+  id                  String          @id @default(cuid())
+  companyId           String
+  sku                 String?
+  name                String
+  categoryKey         String
+  attributes          Json            @default("{}")
+  controlsStock       Boolean         @default(false)
+  controlsCost        Boolean         @default(false)
+  sellable            Boolean         @default(true)
+  usableAsInput       Boolean         @default(false)
+  requiresProduction  Boolean         @default(false)
+  active              Boolean         @default(true)
+  deletedAt           DateTime?
+  deletedById         String?
+  createdById         String?
+  updatedById         String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  company             Company         @relation(fields: [companyId], references: [id])
+  inventoryItems      InventoryItem[]
+  orderItems          OrderItem[]
+
+  @@unique([companyId, sku])
+  @@index([companyId, categoryKey])
+  @@index([companyId, active, deletedAt])
+}
+
+model InventoryItem {
+  id          String    @id @default(cuid())
+  companyId   String
+  productId   String
+  locationKey String
+  quantity    Decimal   @default(0) @db.Decimal(18, 4)
+  unitCost    Decimal?  @db.Decimal(18, 4)
+  metadata    Json      @default("{}")
+  active      Boolean   @default(true)
+  deletedAt   DateTime?
+  deletedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company     Company   @relation(fields: [companyId], references: [id])
+  product     Product   @relation(fields: [productId], references: [id])
+
+  @@unique([companyId, productId, locationKey])
+  @@index([companyId, locationKey])
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  companyId    String
+  customerId   String?
+  code         String
+  status       OrderStatus @default(DRAFT)
+  workflowKey  String?
+  subtotal     Decimal     @default(0) @db.Decimal(18, 2)
+  discount     Decimal     @default(0) @db.Decimal(18, 2)
+  tax          Decimal     @default(0) @db.Decimal(18, 2)
+  total        Decimal     @default(0) @db.Decimal(18, 2)
+  metadata     Json        @default("{}")
+  active       Boolean     @default(true)
+  deletedAt    DateTime?
+  deletedById  String?
+  createdById  String?
+  updatedById  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  company      Company     @relation(fields: [companyId], references: [id])
+  customer     Customer?   @relation(fields: [customerId], references: [id])
+  items        OrderItem[]
+  createdBy    User?       @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  updatedBy    User?       @relation("OrderUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([companyId, code])
+  @@index([companyId, status, active, deletedAt])
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  companyId   String
+  productId   String?
+  description String
+  quantity    Decimal  @db.Decimal(18, 4)
+  unitPrice   Decimal  @db.Decimal(18, 2)
+  total       Decimal  @db.Decimal(18, 2)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  order       Order    @relation(fields: [orderId], references: [id])
+  product     Product? @relation(fields: [productId], references: [id])
+
+  @@index([companyId, orderId])
+}
+
+model AutomationRule {
+  id          String    @id @default(cuid())
+  companyId   String
+  moduleKey   String
+  name        String
+  trigger     Json
+  conditions  Json      @default("{}")
+  actions     Json
+  enabled     Boolean   @default(false)
+  active      Boolean   @default(true)
+  deletedAt   DateTime?
+  deletedById String?
+  createdById String?
+  updatedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company     Company   @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, moduleKey, enabled])
+}
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  companyId   String
+  actorId     String?
+  action      AuditAction
+  entityType  String
+  entityId    String
+  before      Json?
+  after       Json?
+  changes     Json        @default("{}")
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+
+  company     Company     @relation(fields: [companyId], references: [id])
+  actor       User?       @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([companyId, entityType, entityId])
+  @@index([companyId, createdAt])
+}
+
+model BackupJob {
+  id          String       @id @default(cuid())
+  companyId   String?
+  reason      String
+  status      BackupStatus @default(PENDING)
+  filePath    String?
+  checksum    String?
+  error       String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime     @default(now())
+
+  company     Company?     @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, status, createdAt])
+}
