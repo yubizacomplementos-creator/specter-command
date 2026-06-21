@@ -123,6 +123,10 @@ const orderMessages = {
     tone: "error",
     text: "El cliente seleccionado no existe o esta inactivo."
   },
+  insufficient_stock: {
+    tone: "error",
+    text: "No hay stock suficiente en la ubicacion principal para ese producto."
+  },
   forbidden: {
     tone: "error",
     text: "Tu rol no permite registrar pedidos."
@@ -179,6 +183,15 @@ function couponFromMetadata(metadata: unknown) {
 
   const couponCode = (metadata as { couponCode?: unknown }).couponCode;
   return typeof couponCode === "string" && couponCode ? couponCode : null;
+}
+
+function inventoryLocationFromMetadata(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || !("inventoryLocation" in metadata)) {
+    return null;
+  }
+
+  const inventoryLocation = (metadata as { inventoryLocation?: unknown }).inventoryLocation;
+  return typeof inventoryLocation === "string" && inventoryLocation ? inventoryLocation : null;
 }
 
 export default async function CommandPage({ searchParams }: CommandPageProps) {
@@ -819,6 +832,7 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
               <div className="grid gap-3">
                 {orders.map((order) => {
                   const couponCode = couponFromMetadata(order.metadata);
+                  const inventoryLocation = inventoryLocationFromMetadata(order.metadata);
                   return (
                     <article key={order.id} className="rounded border border-white/10 bg-white/[0.035] p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -842,6 +856,11 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
                         {couponCode ? (
                           <span className="rounded bg-command-cyan/10 px-2 py-1 text-command-cyan">
                             Cupon {couponCode}
+                          </span>
+                        ) : null}
+                        {inventoryLocation ? (
+                          <span className="rounded bg-white/10 px-2 py-1 text-slate-300">
+                            Stock {inventoryLocation}
                           </span>
                         ) : null}
                       </div>

@@ -16,6 +16,9 @@ const orderSchema = z.object({
   tax: z.coerce.number().nonnegative().max(999999999).default(0)
 });
 
+const defaultInventoryLocation = "principal";
+const insufficientStockError = "INSUFFICIENT_STOCK";
+
 function clientIp(request: NextRequest) {
   return (
     request.headers.get("cf-connecting-ip") ??
@@ -28,14 +31,13 @@ function cleanOptional(value?: string) {
   return cleaned ? cleaned : null;
 }
 
-async function nextOrderCode(companyId: string) {
+function orderCodeFromCount(count: number) {
   const today = new Date();
   const stamp = [
     today.getFullYear(),
     String(today.getMonth() + 1).padStart(2, "0"),
     String(today.getDate()).padStart(2, "0")
   ].join("");
-  const count = await prisma.order.count({ where: { companyId } });
   return `ORD-${stamp}-${String(count + 1).padStart(4, "0")}`;
 }
 
@@ -99,33 +101,58 @@ export async function POST(request: NextRequest) {
   const total = Math.max(0, subtotal - parsed.data.discount + parsed.data.tax);
 
   try {
-    const code = await nextOrderCode(session.company.id);
-    const order = await prisma.order.create({
-      data: {
-        companyId: session.company.id,
-        customerId,
-        code,
-        status: OrderStatus.OPEN,
-        subtotal,
-        discount: parsed.data.discount,
-        tax: parsed.data.tax,
-        total,
-        metadata: {
-          couponCode: cleanOptional(parsed.data.couponCode)
-        },
-        createdById: session.user.id,
-        updatedById: session.user.id,
-        items: {
-          create: {
+    const order = await prisma.$transaction(async (tx) => {
+      if (product.controlsStock) {
+        const stockUpdate = await tx.inventoryItem.updateMany({
+          where: {
             companyId: session.company.id,
             productId: product.id,
-            description: product.name,
-            quantity: parsed.data.quantity,
-            unitPrice: parsed.data.unitPrice,
-            total: subtotal
+            locationKey: defaultInventoryLocation,
+            active: true,
+            deletedAt: null,
+            quantity: { gte: parsed.data.quantity }
+          },
+          data: {
+            quantity: { decrement: parsed.data.quantity }
           }
+        });
+
+        if (stockUpdate.count !== 1) {
+          throw new Error(insufficientStockError);
         }
       }
+
+      const orderCount = await tx.order.count({ where: { companyId: session.company.id } });
+      const code = orderCodeFromCount(orderCount);
+      return tx.order.create({
+        data: {
+          companyId: session.company.id,
+          customerId,
+          code,
+          status: OrderStatus.OPEN,
+          subtotal,
+          discount: parsed.data.discount,
+          tax: parsed.data.tax,
+          total,
+          metadata: {
+            couponCode: cleanOptional(parsed.data.couponCode),
+            inventoryLocation: product.controlsStock ? defaultInventoryLocation : null,
+            stockDeducted: product.controlsStock
+          },
+          createdById: session.user.id,
+          updatedById: session.user.id,
+          items: {
+            create: {
+              companyId: session.company.id,
+              productId: product.id,
+              description: product.name,
+              quantity: parsed.data.quantity,
+              unitPrice: parsed.data.unitPrice,
+              total: subtotal
+            }
+          }
+        }
+      });
     });
 
     await writeAuditLog({
@@ -143,14 +170,20 @@ export async function POST(request: NextRequest) {
         couponCode: cleanOptional(parsed.data.couponCode),
         discount: parsed.data.discount,
         tax: parsed.data.tax,
-        total
+        total,
+        inventoryLocation: product.controlsStock ? defaultInventoryLocation : null,
+        stockDeducted: product.controlsStock
       },
       ipAddress: clientIp(request),
       userAgent: request.headers.get("user-agent") ?? undefined
     });
 
     return NextResponse.redirect(publicUrl(request, "/command?order=created"), 303);
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === insufficientStockError) {
+      return NextResponse.redirect(publicUrl(request, "/command?order=insufficient_stock"), 303);
+    }
+
     return NextResponse.redirect(publicUrl(request, "/command?order=failed"), 303);
   }
 }
