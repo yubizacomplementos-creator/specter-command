@@ -23,6 +23,10 @@ type ShopifyProductNode = {
       sku?: string | null;
       price?: string | null;
       inventoryQuantity?: number | null;
+      selectedOptions?: Array<{
+        name: string;
+        value: string;
+      }>;
     }>;
   };
 };
@@ -58,6 +62,10 @@ const productsQuery = `
             sku
             price
             inventoryQuantity
+            selectedOptions {
+              name
+              value
+            }
           }
         }
       }
@@ -116,6 +124,14 @@ function variantSku(product: ShopifyProductNode, variant: ShopifyProductNode["va
 
   const id = variant.legacyResourceId ?? product.legacyResourceId ?? product.id.split("/").pop() ?? product.handle;
   return `SHOPIFY-${id}`.slice(0, 60);
+}
+
+function optionAttributes(variant: ShopifyProductNode["variants"]["nodes"][number]) {
+  return Object.fromEntries(
+    (variant.selectedOptions ?? [])
+      .map((option) => [slug(option.name) || option.name.toLowerCase(), option.value] as const)
+      .filter(([key, value]) => Boolean(key) && Boolean(value))
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -179,6 +195,7 @@ export async function POST(request: NextRequest) {
       const sku = variantSku(product, variant);
       const name = variantName(product, variant);
       const categoryKey = slug(product.productType || "shopify") || "shopify";
+      const variantAttributes = optionAttributes(variant);
       const attributes = {
         source: "shopify",
         shopDomain,
@@ -190,7 +207,9 @@ export async function POST(request: NextRequest) {
         status: product.status ?? null,
         imageUrl: product.featuredImage?.url ?? null,
         price: variant.price ?? null,
-        inventoryQuantity: variant.inventoryQuantity ?? null
+        inventoryQuantity: variant.inventoryQuantity ?? null,
+        variantOptions: variant.selectedOptions ?? [],
+        ...variantAttributes
       } satisfies Prisma.InputJsonObject;
 
       await prisma.product.upsert({
