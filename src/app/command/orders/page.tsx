@@ -6,6 +6,7 @@ import { prisma } from "@/server/db";
 type OrdersPageProps = {
   searchParams?: Promise<{
     order?: string;
+    count?: string;
     q?: string;
     orderStatus?: string;
   }>;
@@ -22,7 +23,10 @@ const orderMessages = {
   invalid_status: { tone: "error", text: "Solo puedes cerrar o cancelar pedidos abiertos." },
   status_failed: { tone: "error", text: "No pudimos cambiar el estado del pedido." },
   forbidden: { tone: "error", text: "Tu rol no permite registrar pedidos." },
-  failed: { tone: "error", text: "No pudimos registrar el pedido. Intenta de nuevo." }
+  failed: { tone: "error", text: "No pudimos registrar el pedido. Intenta de nuevo." },
+  shopify_synced: { tone: "success", text: "Pedidos sincronizados desde Shopify." },
+  shopify_missing: { tone: "error", text: "Configura dominio y token de Shopify en Integraciones antes de sincronizar pedidos." },
+  shopify_failed: { tone: "error", text: "Shopify no respondio correctamente. Revisa permisos read_orders/read_customers." }
 } as const;
 
 function money(value: { toString(): string } | number) {
@@ -51,6 +55,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
     ? (statusParam as OrderStatus)
     : undefined;
   const message = params?.order ? orderMessages[params.order as keyof typeof orderMessages] : undefined;
+  const syncCount = params?.count ? Number(params.count) : undefined;
   const canManageOrders = session.role !== "VIEWER";
 
   const orderWhere = {
@@ -137,33 +142,46 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
           {message ? (
             <p className={`mt-4 rounded-md border px-3 py-2 text-sm ${message.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}`}>
               {message.text}
+              {params?.order === "shopify_synced" && syncCount !== undefined ? ` Total: ${syncCount}.` : ""}
             </p>
           ) : null}
         </section>
 
         {canManageOrders ? (
-          <section className="rounded-lg border border-slate-200 bg-white p-5">
-            <h2 className="text-lg font-semibold">Registrar pedido</h2>
-            <form action="/api/orders" method="post" className="mt-4 grid gap-3 md:grid-cols-2">
-              <select name="customerId" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600">
-                <option value="">Consumidor final</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>{customer.name}</option>
-                ))}
-              </select>
-              <select name="productId" required className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600">
-                <option value="">Seleccionar producto</option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>{product.name}</option>
-                ))}
-              </select>
-              <input name="quantity" type="number" min="0.01" step="0.01" defaultValue="1" required placeholder="Cantidad" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
-              <input name="unitPrice" type="number" min="0" step="1" required placeholder="Precio unitario" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
-              <input name="couponCode" maxLength={60} placeholder="Cupon" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
-              <input name="discount" type="number" min="0" step="1" defaultValue="0" placeholder="Descuento" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
-              <input name="tax" type="number" min="0" step="1" defaultValue="0" placeholder="Impuesto" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
-              <button className="rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800 md:w-fit">
-                Crear pedido
+          <section className="grid gap-4 lg:grid-cols-[1fr_320px]">
+            <div className="rounded-lg border border-slate-200 bg-white p-5">
+              <h2 className="text-lg font-semibold">Registrar pedido</h2>
+              <form action="/api/orders" method="post" className="mt-4 grid gap-3 md:grid-cols-2">
+                <select name="customerId" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600">
+                  <option value="">Consumidor final</option>
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>{customer.name}</option>
+                  ))}
+                </select>
+                <select name="productId" required className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600">
+                  <option value="">Seleccionar producto</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>{product.name}</option>
+                  ))}
+                </select>
+                <input name="quantity" type="number" min="0.01" step="0.01" defaultValue="1" required placeholder="Cantidad" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                <input name="unitPrice" type="number" min="0" step="1" required placeholder="Precio unitario" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                <input name="couponCode" maxLength={60} placeholder="Cupon" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                <input name="discount" type="number" min="0" step="1" defaultValue="0" placeholder="Descuento" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                <input name="tax" type="number" min="0" step="1" defaultValue="0" placeholder="Impuesto" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                <button className="rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800 md:w-fit">
+                  Crear pedido
+                </button>
+              </form>
+            </div>
+
+            <form action="/api/shopify/orders/sync" method="post" className="rounded-lg border border-slate-200 bg-white p-5">
+              <h2 className="text-lg font-semibold">Shopify</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Importa los pedidos recientes de Shopify sin duplicarlos. No descuenta inventario automaticamente.
+              </p>
+              <button className="mt-4 rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">
+                Sincronizar pedidos
               </button>
             </form>
           </section>
