@@ -75,6 +75,7 @@ model Company {
   inventoryItems  InventoryItem[]
   orders          Order[]
   automationRules AutomationRule[]
+  integrations     IntegrationSetting[]
   auditLogs       AuditLog[]
   backupJobs      BackupJob[]
 
@@ -391,6 +392,25 @@ model AutomationRule {
   company     Company   @relation(fields: [companyId], references: [id])
 
   @@index([companyId, moduleKey, enabled])
+}
+
+model IntegrationSetting {
+  id               String    @id @default(cuid())
+  companyId        String
+  provider         String
+  publicConfig     Json      @default("{}")
+  secretCiphertext String?
+  secretIv         String?
+  secretTag        String?
+  active           Boolean   @default(true)
+  updatedById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  company          Company   @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, provider])
+  @@index([companyId, active])
 }
 
 model AuditLog {

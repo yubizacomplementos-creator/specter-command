@@ -11,6 +11,7 @@ type CommandPageProps = {
     product?: string;
     order?: string;
     inventory?: string;
+    integration?: string;
     count?: string;
   }>;
 };
@@ -185,6 +186,37 @@ const inventoryMessages = {
   }
 } as const;
 
+const integrationMessages = {
+  wompi: {
+    tone: "success",
+    text: "Configuracion de Wompi actualizada."
+  },
+  openai: {
+    tone: "success",
+    text: "Configuracion de OpenAI actualizada."
+  },
+  r2: {
+    tone: "success",
+    text: "Configuracion de Cloudflare R2 actualizada."
+  },
+  resend: {
+    tone: "success",
+    text: "Configuracion de Resend actualizada."
+  },
+  sentry: {
+    tone: "success",
+    text: "Configuracion de Sentry actualizada."
+  },
+  forbidden: {
+    tone: "error",
+    text: "Tu rol no permite editar integraciones."
+  },
+  invalid: {
+    tone: "error",
+    text: "La integracion seleccionada no es valida."
+  }
+} as const;
+
 function money(value: { toString(): string } | number) {
   return new Intl.NumberFormat("es-CO", {
     style: "currency",
@@ -209,6 +241,24 @@ function inventoryLocationFromMetadata(metadata: unknown) {
 
   const inventoryLocation = (metadata as { inventoryLocation?: unknown }).inventoryLocation;
   return typeof inventoryLocation === "string" && inventoryLocation ? inventoryLocation : null;
+}
+
+function configValue(config: unknown, key: string) {
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    return "";
+  }
+
+  const value = (config as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : "";
+}
+
+function configuredSecrets(config: unknown) {
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    return [];
+  }
+
+  const value = (config as Record<string, unknown>).configuredSecrets;
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 export default async function CommandPage({ searchParams }: CommandPageProps) {
@@ -238,6 +288,10 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
     ? inventoryMessages[params.inventory as keyof typeof inventoryMessages]
     : undefined;
   const canManageInventory = session.role !== "VIEWER";
+  const integrationMessage = params?.integration
+    ? integrationMessages[params.integration as keyof typeof integrationMessages]
+    : undefined;
+  const canManageIntegrations = session.role === "OWNER" || session.role === "ADMIN";
   const enabledModules = await prisma.companyModule.findMany({
     where: { companyId: session.company.id },
     include: { module: true },
@@ -334,6 +388,14 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
       }
     })
   ]);
+  const integrationSettings = await prisma.integrationSetting.findMany({
+    where: {
+      companyId: session.company.id,
+      active: true
+    },
+    orderBy: { provider: "asc" }
+  });
+  const integrationMap = new Map(integrationSettings.map((setting) => [setting.provider, setting]));
   const [closedSales, openSales, cancelledOrderCount, statusCounts, inventorySnapshot] = await Promise.all([
     prisma.order.aggregate({
       where: {
@@ -569,6 +631,156 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
               ) : (
                 <p className="mt-3 text-sm text-slate-400">Sin alertas de stock bajo.</p>
               )}
+            </div>
+
+            <div className="mt-4 rounded border border-white/10 bg-white/[0.035] p-4">
+              <h3 className="font-semibold">Exportaciones CSV</h3>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[
+                  ["Clientes", "customers"],
+                  ["Productos", "products"],
+                  ["Inventario", "inventory"],
+                  ["Pedidos", "orders"]
+                ].map(([label, type]) => (
+                  <a
+                    key={type}
+                    href={`/api/exports?type=${type}`}
+                    className="rounded border border-command-cyan/40 px-3 py-2 text-sm text-command-cyan hover:bg-command-cyan/10"
+                  >
+                    Descargar {label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-sm text-slate-400">Servicios externos</p>
+                <h2 className="text-2xl font-semibold">Integraciones</h2>
+              </div>
+              <span className="rounded border border-white/15 bg-white/5 px-3 py-1 text-sm text-slate-300">
+                {integrationSettings.length} configuradas
+              </span>
+            </div>
+
+            {integrationMessage ? (
+              <p
+                className={`mb-4 rounded border px-3 py-2 text-sm ${
+                  integrationMessage.tone === "success"
+                    ? "border-command-green/40 bg-command-green/10 text-command-green"
+                    : "border-red-400/40 bg-red-400/10 text-red-200"
+                }`}
+              >
+                {integrationMessage.text}
+              </p>
+            ) : null}
+
+            <div className="grid gap-4">
+              {[
+                {
+                  provider: "wompi",
+                  title: "Wompi",
+                  description: "Pagos y webhooks de transacciones.",
+                  publicFields: [
+                    ["environment", "Ambiente", "production"],
+                    ["publicKey", "Llave publica", ""]
+                  ],
+                  secretFields: [
+                    ["privateKey", "Llave privada"],
+                    ["eventsSecret", "Secreto de eventos"]
+                  ]
+                },
+                {
+                  provider: "openai",
+                  title: "OpenAI",
+                  description: "Modelos de IA para automatizaciones.",
+                  publicFields: [["model", "Modelo", "gpt-5"]],
+                  secretFields: [["apiKey", "API key"]]
+                },
+                {
+                  provider: "r2",
+                  title: "Cloudflare R2",
+                  description: "Almacenamiento de archivos y backups remotos.",
+                  publicFields: [
+                    ["accountId", "Account ID", ""],
+                    ["bucket", "Bucket", "specter-command"],
+                    ["endpoint", "Endpoint S3", ""],
+                    ["publicUrl", "URL publica", ""]
+                  ],
+                  secretFields: [
+                    ["accessKeyId", "Access key ID"],
+                    ["secretAccessKey", "Secret access key"]
+                  ]
+                },
+                {
+                  provider: "resend",
+                  title: "Resend",
+                  description: "Envio de correos transaccionales.",
+                  publicFields: [["fromEmail", "Remitente", "Specter Command <no-reply@spectercommand.com>"]],
+                  secretFields: [["apiKey", "API key"]]
+                },
+                {
+                  provider: "sentry",
+                  title: "Sentry",
+                  description: "Monitoreo de errores y performance.",
+                  publicFields: [
+                    ["dsn", "DSN", ""],
+                    ["org", "Organizacion", ""],
+                    ["project", "Proyecto", "specter-command"]
+                  ],
+                  secretFields: [["authToken", "Auth token"]]
+                }
+              ].map((integration) => {
+                const current = integrationMap.get(integration.provider);
+                const secrets = configuredSecrets(current?.publicConfig);
+                return (
+                  <form key={integration.provider} action="/api/integrations" method="post" className="rounded border border-white/10 bg-white/[0.035] p-4">
+                    <input type="hidden" name="provider" value={integration.provider} />
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold">{integration.title}</h3>
+                        <p className="mt-1 text-sm text-slate-400">{integration.description}</p>
+                      </div>
+                      <span className={`rounded border px-3 py-1 text-xs ${current ? "border-command-green/40 bg-command-green/10 text-command-green" : "border-white/15 bg-white/5 text-slate-400"}`}>
+                        {current ? "Configurada" : "Pendiente"}
+                      </span>
+                    </div>
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      {integration.publicFields.map(([name, label, placeholder]) => (
+                        <label key={name} className="grid gap-2 text-sm text-slate-300">
+                          {label}
+                          <input
+                            name={name}
+                            defaultValue={configValue(current?.publicConfig, name)}
+                            placeholder={placeholder}
+                            disabled={!canManageIntegrations}
+                            className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan disabled:opacity-60"
+                          />
+                        </label>
+                      ))}
+                      {integration.secretFields.map(([name, label]) => (
+                        <label key={name} className="grid gap-2 text-sm text-slate-300">
+                          {label}
+                          <input
+                            name={name}
+                            type="password"
+                            placeholder={secrets.includes(name) ? "Configurado. Escribe para reemplazar." : "Sin configurar"}
+                            disabled={!canManageIntegrations}
+                            className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan disabled:opacity-60"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    {canManageIntegrations ? (
+                      <button className="mt-4 rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white">
+                        Guardar {integration.title}
+                      </button>
+                    ) : null}
+                  </form>
+                );
+              })}
             </div>
           </div>
 
