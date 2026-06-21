@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.redirect(publicUrl(request, "/login"), 303);
   }
 
-  if (![MembershipRole.OWNER, MembershipRole.ADMIN].includes(session.role as MembershipRole)) {
+  if (session.role !== MembershipRole.OWNER && session.role !== MembershipRole.ADMIN) {
     return NextResponse.redirect(publicUrl(request, "/command?user=forbidden"), 303);
   }
 
