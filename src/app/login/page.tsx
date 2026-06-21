@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentSession } from "@/server/session";
 
 type LoginPageProps = {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; reset?: string }>;
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
@@ -25,6 +25,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         {params.error ? (
           <div className="mt-5 rounded border border-command-red/40 bg-command-red/10 px-3 py-2 text-sm text-command-red">
             Credenciales invalidas o usuario sin empresa activa.
+          </div>
+        ) : null}
+
+        {params.reset === "updated" ? (
+          <div className="mt-5 rounded border border-command-green/40 bg-command-green/10 px-3 py-2 text-sm text-command-green">
+            Contrasena actualizada. Ya puedes ingresar con tu nueva clave.
           </div>
         ) : null}
 
@@ -55,6 +61,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             Entrar
           </button>
         </form>
+
+        <a href="/forgot-password" className="mt-5 block text-center text-sm text-command-cyan hover:text-cyan-300">
+          Olvide mi contrasena
+        </a>
       </section>
     </main>
   );

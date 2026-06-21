@@ -96,6 +96,21 @@ model User {
   auditLogs       AuditLog[]     @relation("AuditActor")
   createdOrders   Order[]        @relation("OrderCreatedBy")
   updatedOrders   Order[]        @relation("OrderUpdatedBy")
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt, usedAt])
 }
 
 model Membership {
