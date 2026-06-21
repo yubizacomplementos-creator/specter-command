@@ -1,0 +1,22 @@
+{
+  "domain": "spectercommand.com",
+  "www": "www.spectercommand.com",
+  "vpsProvider": "Hostinger",
+  "publicIp": "2.25.64.250",
+  "appPort": 3000,
+  "reverseProxy": ["nginx", "caddy"],
+  "cloudflare": {
+    "rootRecord": {
+      "type": "A",
+      "name": "@",
+      "content": "2.25.64.250",
+      "proxied": true
+    },
+    "wwwRecord": {
+      "type": "CNAME",
+      "name": "www",
+      "content": "spectercommand.com",
+      "proxied": true
+    }
+  }
+}

@@ -12,13 +12,17 @@
 - OpenAI: IA opcional.
 - Wompi: pagos.
 
-## DNS requerido en Cloudflare
+## VPS
 
-Cuando tengas la IP publica del VPS de Hostinger:
+- IP publica Hostinger: `2.25.64.250`
+
+La IP responde a ping desde esta maquina.
+
+## DNS requerido en Cloudflare
 
 | Tipo | Nombre | Valor |
 | --- | --- | --- |
-| A | `@` | `IP_DEL_VPS_HOSTINGER` |
+| A | `@` | `2.25.64.250` |
 | CNAME | `www` | `spectercommand.com` |
 | CNAME | `files` | dominio publico de R2, si se usara publico |
 | TXT | `@` | SPF indicado por Resend |
@@ -26,6 +30,8 @@ Cuando tengas la IP publica del VPS de Hostinger:
 | TXT | `_dmarc` | `v=DMARC1; p=quarantine; rua=mailto:admin@spectercommand.com` |
 
 En Cloudflare usa SSL/TLS en modo `Full (strict)` cuando el servidor tenga certificado valido.
+
+Si Cloudflare esta en modo proxied, el registro `A @` puede quedar con nube naranja. Para probar el primer despliegue, tambien se puede dejar temporalmente en DNS only.
 
 ## Variables de produccion
 
