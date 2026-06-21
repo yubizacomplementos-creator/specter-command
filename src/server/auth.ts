@@ -1,6 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 import { z } from "zod";
 
+export const sessionCookieName = "specter_session";
+
 const sessionSchema = z.object({
   sub: z.string(),
   email: z.string().email(),

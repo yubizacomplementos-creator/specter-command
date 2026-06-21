@@ -1,4 +1,5 @@
 import { architecturePrinciples, commandModules } from "@/lib/modules";
+import Link from "next/link";
 
 const statusLabel = {
   active: "Activo",
@@ -73,9 +74,9 @@ export default function Home() {
             <p className="text-sm text-slate-400">Modulos iniciales</p>
             <h2 className="text-2xl font-semibold text-white">Consola operativa</h2>
           </div>
-          <button className="rounded border border-command-cyan/50 px-4 py-2 text-sm text-command-cyan">
-            Configurar modulos
-          </button>
+          <Link className="rounded border border-command-cyan/50 px-4 py-2 text-sm text-command-cyan" href="/login">
+            Entrar al comando
+          </Link>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
