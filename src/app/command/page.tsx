@@ -261,6 +261,34 @@ function configuredSecrets(config: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function auditLabel(entityType: string, action: string) {
+  const entities: Record<string, string> = {
+    Customer: "Cliente",
+    Product: "Producto",
+    InventoryItem: "Inventario",
+    Order: "Pedido",
+    Membership: "Usuario",
+    IntegrationSetting: "Integracion",
+    customers: "Clientes",
+    products: "Productos",
+    inventory: "Inventario",
+    orders: "Pedidos"
+  };
+  const actions: Record<string, string> = {
+    CREATE: "creo",
+    UPDATE: "actualizo",
+    DELETE: "elimino",
+    RESTORE: "restauro",
+    LOGIN: "inicio sesion",
+    EXPORT: "exporto",
+    MODULE_ENABLE: "activo modulo",
+    MODULE_DISABLE: "desactivo modulo",
+    AUTOMATION_RUN: "ejecuto automatizacion"
+  };
+
+  return `${actions[action] ?? action.toLowerCase()} ${entities[entityType] ?? entityType}`;
+}
+
 export default async function CommandPage({ searchParams }: CommandPageProps) {
   const session = await requireSession();
   const params = await searchParams;
@@ -396,6 +424,16 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
     orderBy: { provider: "asc" }
   });
   const integrationMap = new Map(integrationSettings.map((setting) => [setting.provider, setting]));
+  const auditLogs = await prisma.auditLog.findMany({
+    where: {
+      companyId: session.company.id
+    },
+    include: {
+      actor: true
+    },
+    orderBy: { createdAt: "desc" },
+    take: 12
+  });
   const [closedSales, openSales, cancelledOrderCount, statusCounts, inventorySnapshot] = await Promise.all([
     prisma.order.aggregate({
       where: {
@@ -782,6 +820,45 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
                 );
               })}
             </div>
+          </div>
+
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-sm text-slate-400">Trazabilidad</p>
+                <h2 className="text-2xl font-semibold">Actividad reciente</h2>
+              </div>
+              <span className="rounded border border-white/15 bg-white/5 px-3 py-1 text-sm text-slate-300">
+                Ultimos {auditLogs.length}
+              </span>
+            </div>
+
+            {auditLogs.length ? (
+              <div className="grid gap-3">
+                {auditLogs.map((log) => (
+                  <article key={log.id} className="rounded border border-white/10 bg-white/[0.035] p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold">{auditLabel(log.entityType, log.action)}</h3>
+                        <p className="mt-1 text-sm text-slate-400">
+                          {log.actor?.email ?? "Sistema"} · {log.entityType}
+                        </p>
+                      </div>
+                      <span className="text-xs text-slate-500">
+                        {log.createdAt.toLocaleString("es-CO", { timeZone: "America/Bogota" })}
+                      </span>
+                    </div>
+                    {log.ipAddress ? (
+                      <p className="mt-2 text-xs text-slate-500">IP {log.ipAddress}</p>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded border border-dashed border-white/15 p-4 text-sm text-slate-400">
+                Aun no hay actividad registrada.
+              </p>
+            )}
           </div>
 
           <div className="mt-8 border-t border-white/10 pt-6">
