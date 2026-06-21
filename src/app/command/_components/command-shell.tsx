@@ -16,7 +16,7 @@ const navItems = [
   ["Pedidos", "/command/orders"],
   ["Inventario", "/command/inventory"],
   ["Reportes", "/command/reports"],
-  ["Integraciones", "/command#integraciones"]
+  ["Integraciones", "/command/settings"]
 ] as const;
 
 export function CommandShell({ children, companyName, userEmail, role }: CommandShellProps) {

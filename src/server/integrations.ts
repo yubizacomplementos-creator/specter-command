@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-export const integrationProviders = ["wompi", "openai", "r2", "resend", "sentry"] as const;
+export const integrationProviders = ["wompi", "openai", "r2", "resend", "sentry", "shopify", "bot"] as const;
 export type IntegrationProvider = (typeof integrationProviders)[number];
 
 function encryptionKey() {
@@ -25,6 +25,30 @@ export function encryptSecrets(secrets: Record<string, string>) {
     secretIv: iv.toString("base64"),
     secretTag: tag.toString("base64")
   };
+}
+
+export function decryptSecrets(input: {
+  secretCiphertext?: string | null;
+  secretIv?: string | null;
+  secretTag?: string | null;
+}) {
+  if (!input.secretCiphertext || !input.secretIv || !input.secretTag) {
+    return {};
+  }
+
+  const decipher = crypto.createDecipheriv(
+    "aes-256-gcm",
+    encryptionKey(),
+    Buffer.from(input.secretIv, "base64")
+  );
+  decipher.setAuthTag(Buffer.from(input.secretTag, "base64"));
+
+  const plaintext = Buffer.concat([
+    decipher.update(Buffer.from(input.secretCiphertext, "base64")),
+    decipher.final()
+  ]).toString("utf8");
+
+  return JSON.parse(plaintext) as Record<string, string>;
 }
 
 export function configuredSecretKeys(secrets: Record<string, string>) {

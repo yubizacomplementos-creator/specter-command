@@ -33,6 +33,14 @@ const fieldMap = {
   sentry: {
     public: ["dsn", "org", "project"],
     secret: ["authToken"]
+  },
+  shopify: {
+    public: ["shopDomain", "apiVersion"],
+    secret: ["accessToken", "webhookSecret"]
+  },
+  bot: {
+    public: ["name", "tone", "handoffEmail"],
+    secret: ["systemPrompt"]
   }
 } as const;
 
