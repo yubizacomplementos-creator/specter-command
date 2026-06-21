@@ -9,6 +9,8 @@ type CommandPageProps = {
     customer?: string;
     product?: string;
     order?: string;
+    inventory?: string;
+    count?: string;
   }>;
 };
 
@@ -85,6 +87,14 @@ const productMessages = {
   duplicate: {
     tone: "error",
     text: "No pudimos registrar el producto. Revisa si el SKU ya existe."
+  },
+  imported: {
+    tone: "success",
+    text: "Productos importados correctamente."
+  },
+  import_invalid: {
+    tone: "error",
+    text: "El archivo CSV no tiene productos validos para importar."
   }
 } as const;
 
@@ -112,6 +122,29 @@ const orderMessages = {
   failed: {
     tone: "error",
     text: "No pudimos registrar el pedido. Intenta de nuevo."
+  }
+} as const;
+
+const inventoryMessages = {
+  updated: {
+    tone: "success",
+    text: "Inventario actualizado correctamente."
+  },
+  invalid: {
+    tone: "error",
+    text: "Selecciona producto, ubicacion y una cantidad valida."
+  },
+  invalid_product: {
+    tone: "error",
+    text: "El producto seleccionado no controla inventario o esta inactivo."
+  },
+  forbidden: {
+    tone: "error",
+    text: "Tu rol no permite actualizar inventario."
+  },
+  failed: {
+    tone: "error",
+    text: "No pudimos actualizar el inventario. Intenta de nuevo."
   }
 } as const;
 
@@ -149,11 +182,16 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
   const productMessage = params?.product
     ? productMessages[params.product as keyof typeof productMessages]
     : undefined;
+  const productImportCount = params?.count ? Number(params.count) : undefined;
   const canManageProducts = session.role !== "VIEWER";
   const orderMessage = params?.order
     ? orderMessages[params.order as keyof typeof orderMessages]
     : undefined;
   const canManageOrders = session.role !== "VIEWER";
+  const inventoryMessage = params?.inventory
+    ? inventoryMessages[params.inventory as keyof typeof inventoryMessages]
+    : undefined;
+  const canManageInventory = session.role !== "VIEWER";
   const enabledModules = await prisma.companyModule.findMany({
     where: { companyId: session.company.id },
     include: { module: true },
@@ -205,6 +243,7 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
     })
   ]);
   const sellableProducts = products.filter((product) => product.sellable);
+  const stockProducts = products.filter((product) => product.controlsStock);
   const [orders, orderCount] = await Promise.all([
     prisma.order.findMany({
       where: {
@@ -223,6 +262,25 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
       take: 8
     }),
     prisma.order.count({
+      where: {
+        companyId: session.company.id,
+        active: true,
+        deletedAt: null
+      }
+    })
+  ]);
+  const [inventoryItems, inventoryCount] = await Promise.all([
+    prisma.inventoryItem.findMany({
+      where: {
+        companyId: session.company.id,
+        active: true,
+        deletedAt: null
+      },
+      include: { product: true },
+      orderBy: { updatedAt: "desc" },
+      take: 8
+    }),
+    prisma.inventoryItem.count({
       where: {
         companyId: session.company.id,
         active: true,
@@ -463,6 +521,119 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
           <div className="mt-8 border-t border-white/10 pt-6">
             <div className="mb-4 flex items-end justify-between gap-3">
               <div>
+                <p className="text-sm text-slate-400">Operaciones</p>
+                <h2 className="text-2xl font-semibold">Inventario</h2>
+              </div>
+              <span className="rounded border border-white/15 bg-white/5 px-3 py-1 text-sm text-slate-300">
+                {inventoryCount} existencias
+              </span>
+            </div>
+
+            {inventoryMessage ? (
+              <p
+                className={`mb-4 rounded border px-3 py-2 text-sm ${
+                  inventoryMessage.tone === "success"
+                    ? "border-command-green/40 bg-command-green/10 text-command-green"
+                    : "border-red-400/40 bg-red-400/10 text-red-200"
+                }`}
+              >
+                {inventoryMessage.text}
+              </p>
+            ) : null}
+
+            {canManageInventory ? (
+              <form action="/api/inventory" method="post" className="mb-4 grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4 md:grid-cols-2">
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Producto con stock
+                  <select
+                    name="productId"
+                    required
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  >
+                    <option value="">Seleccionar producto</option>
+                    {stockProducts.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Ubicacion
+                  <input
+                    name="locationKey"
+                    required
+                    minLength={2}
+                    defaultValue="principal"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Cantidad disponible
+                  <input
+                    name="quantity"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Costo unitario
+                  <input
+                    name="unitCost"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="Opcional"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
+                  Motivo
+                  <input
+                    name="reason"
+                    maxLength={160}
+                    placeholder="conteo inicial, compra, ajuste"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <button className="rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white md:w-fit">
+                  Actualizar inventario
+                </button>
+              </form>
+            ) : null}
+
+            {inventoryItems.length ? (
+              <div className="grid gap-3">
+                {inventoryItems.map((item) => (
+                  <article key={item.id} className="rounded border border-white/10 bg-white/[0.035] p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold">{item.product.name}</h3>
+                        <p className="mt-1 text-sm text-slate-400">{item.locationKey}</p>
+                      </div>
+                      <span className="rounded border border-command-green/30 bg-command-green/10 px-3 py-1 text-sm text-command-green">
+                        {item.quantity.toString()} unidades
+                      </span>
+                    </div>
+                    {item.unitCost ? (
+                      <p className="mt-3 text-xs text-slate-400">Costo unitario {money(item.unitCost)}</p>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded border border-dashed border-white/15 p-4 text-sm text-slate-400">
+                Aun no hay existencias registradas.
+              </p>
+            )}
+          </div>
+
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
                 <p className="text-sm text-slate-400">Ventas</p>
                 <h2 className="text-2xl font-semibold">Pedidos</h2>
               </div>
@@ -635,61 +806,88 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
                 }`}
               >
                 {productMessage.text}
+                {params?.product === "imported" && productImportCount ? ` Total: ${productImportCount}.` : ""}
               </p>
             ) : null}
 
             {canManageProducts ? (
-              <form action="/api/products" method="post" className="mb-4 grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4 md:grid-cols-2">
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Nombre
+              <div className="mb-4 grid gap-4">
+                <form action="/api/products" method="post" className="grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4 md:grid-cols-2">
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Nombre
+                    <input
+                      name="name"
+                      required
+                      minLength={2}
+                      className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    SKU
+                    <input
+                      name="sku"
+                      maxLength={60}
+                      placeholder="Opcional"
+                      className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
+                    Categoria
+                    <input
+                      name="categoryKey"
+                      required
+                      minLength={2}
+                      placeholder="ej: suplementos, servicios, combos"
+                      className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    />
+                  </label>
+                  <div className="grid gap-3 rounded border border-white/10 p-3 text-sm text-slate-300 md:col-span-2 md:grid-cols-2">
+                    <label className="flex items-center gap-2">
+                      <input name="controlsStock" type="checkbox" className="h-4 w-4 accent-cyan-300" />
+                      Controla inventario
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input name="usableAsInput" type="checkbox" className="h-4 w-4 accent-cyan-300" />
+                      Puede ser insumo
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input name="requiresProduction" type="checkbox" className="h-4 w-4 accent-cyan-300" />
+                      Requiere produccion
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input name="notSellable" type="checkbox" className="h-4 w-4 accent-cyan-300" />
+                      No se vende directo
+                    </label>
+                  </div>
+                  <button className="rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white md:w-fit">
+                    Registrar producto
+                  </button>
+                </form>
+
+                <form action="/api/products/import" method="post" encType="multipart/form-data" className="grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4">
+                  <div>
+                    <h3 className="font-semibold">Cargue masivo CSV</h3>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Columnas: sku,nombre,categoria,controlaInventario,vendible,insumo,produccion
+                    </p>
+                  </div>
                   <input
-                    name="name"
-                    required
-                    minLength={2}
-                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    name="csvFile"
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-sm text-slate-300 file:mr-3 file:rounded file:border-0 file:bg-command-cyan file:px-3 file:py-1 file:text-command-ink"
                   />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300">
-                  SKU
-                  <input
-                    name="sku"
-                    maxLength={60}
-                    placeholder="Opcional"
-                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  <textarea
+                    name="csvText"
+                    rows={4}
+                    placeholder={'sku,nombre,categoria,controlaInventario,vendible,insumo,produccion\nSKU-001,Proteina vainilla,suplementos,si,si,no,no'}
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-sm text-white outline-none focus:border-command-cyan"
                   />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
-                  Categoria
-                  <input
-                    name="categoryKey"
-                    required
-                    minLength={2}
-                    placeholder="ej: suplementos, servicios, combos"
-                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
-                  />
-                </label>
-                <div className="grid gap-3 rounded border border-white/10 p-3 text-sm text-slate-300 md:col-span-2 md:grid-cols-2">
-                  <label className="flex items-center gap-2">
-                    <input name="controlsStock" type="checkbox" className="h-4 w-4 accent-cyan-300" />
-                    Controla inventario
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input name="usableAsInput" type="checkbox" className="h-4 w-4 accent-cyan-300" />
-                    Puede ser insumo
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input name="requiresProduction" type="checkbox" className="h-4 w-4 accent-cyan-300" />
-                    Requiere produccion
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input name="notSellable" type="checkbox" className="h-4 w-4 accent-cyan-300" />
-                    No se vende directo
-                  </label>
-                </div>
-                <button className="rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white md:w-fit">
-                  Registrar producto
-                </button>
-              </form>
+                  <button className="rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white md:w-fit">
+                    Importar productos
+                  </button>
+                </form>
+              </div>
             ) : null}
 
             {products.length ? (
