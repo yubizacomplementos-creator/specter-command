@@ -23,9 +23,12 @@ find "${BACKUP_DIR}" -type f -name "specter-command-*.dump" -mtime +"${BACKUP_RE
 find "${BACKUP_DIR}" -type f -name "specter-command-*.dump.sha256" -mtime +"${BACKUP_RETENTION_DAYS}" -delete
 
 if command -v rclone >/dev/null 2>&1 && rclone listremotes | grep -q '^specter-r2:'; then
-  rclone copy "${FILE}" "specter-r2:${R2_BUCKET:-specter-command}/postgres/"
-  rclone copy "${FILE}.sha256" "specter-r2:${R2_BUCKET:-specter-command}/postgres/"
-  echo "Backup subido a R2: ${R2_BUCKET:-specter-command}/postgres/$(basename "${FILE}")"
+  if rclone copy "${FILE}" "specter-r2:${R2_BUCKET:-specter-command}/postgres/" &&
+    rclone copy "${FILE}.sha256" "specter-r2:${R2_BUCKET:-specter-command}/postgres/"; then
+    echo "Backup subido a R2: ${R2_BUCKET:-specter-command}/postgres/$(basename "${FILE}")"
+  else
+    echo "R2 no disponible; backup conservado localmente."
+  fi
 else
   echo "R2 no configurado; backup conservado localmente."
 fi
