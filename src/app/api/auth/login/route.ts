@@ -11,6 +11,22 @@ const loginSchema = z.object({
   password: z.string().min(8)
 });
 
+function publicUrl(request: NextRequest, path: string) {
+  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  if (configuredUrl) {
+    return new URL(path, configuredUrl);
+  }
+
+  const protocol = request.headers.get("x-forwarded-proto") ?? "https";
+  const host =
+    request.headers.get("x-forwarded-host") ??
+    request.headers.get("host") ??
+    "spectercommand.com";
+
+  return new URL(path, `${protocol}://${host}`);
+}
+
 export async function POST(request: NextRequest) {
   const form = await request.formData();
   const parsed = loginSchema.safeParse({
@@ -19,7 +35,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!parsed.success) {
-    return NextResponse.redirect(new URL("/login?error=invalid", request.url), 303);
+    return NextResponse.redirect(publicUrl(request, "/login?error=invalid"), 303);
   }
 
   const user = await prisma.user.findUnique({
@@ -37,7 +53,7 @@ export async function POST(request: NextRequest) {
   const passwordOk = user ? await bcrypt.compare(parsed.data.password, user.passwordHash) : false;
 
   if (!user || !membership || !membership.company.active || membership.company.deletedAt || !passwordOk) {
-    return NextResponse.redirect(new URL("/login?error=credentials", request.url), 303);
+    return NextResponse.redirect(publicUrl(request, "/login?error=credentials"), 303);
   }
 
   const token = await signSession({
@@ -56,7 +72,7 @@ export async function POST(request: NextRequest) {
     after: { email: user.email }
   });
 
-  const response = NextResponse.redirect(new URL("/command", request.url), 303);
+  const response = NextResponse.redirect(publicUrl(request, "/command"), 303);
   response.cookies.set(sessionCookieName, token, {
     httpOnly: true,
     sameSite: "lax",
