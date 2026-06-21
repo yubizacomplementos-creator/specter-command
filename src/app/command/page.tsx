@@ -8,6 +8,7 @@ type CommandPageProps = {
     user?: string;
     customer?: string;
     product?: string;
+    order?: string;
   }>;
 };
 
@@ -87,6 +88,50 @@ const productMessages = {
   }
 } as const;
 
+const orderMessages = {
+  created: {
+    tone: "success",
+    text: "Pedido registrado correctamente."
+  },
+  invalid: {
+    tone: "error",
+    text: "Selecciona un producto y revisa cantidad, precio, descuento e impuesto."
+  },
+  invalid_product: {
+    tone: "error",
+    text: "El producto seleccionado no esta disponible para venta."
+  },
+  invalid_customer: {
+    tone: "error",
+    text: "El cliente seleccionado no existe o esta inactivo."
+  },
+  forbidden: {
+    tone: "error",
+    text: "Tu rol no permite registrar pedidos."
+  },
+  failed: {
+    tone: "error",
+    text: "No pudimos registrar el pedido. Intenta de nuevo."
+  }
+} as const;
+
+function money(value: { toString(): string } | number) {
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    maximumFractionDigits: 0
+  }).format(Number(value.toString()));
+}
+
+function couponFromMetadata(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || !("couponCode" in metadata)) {
+    return null;
+  }
+
+  const couponCode = (metadata as { couponCode?: unknown }).couponCode;
+  return typeof couponCode === "string" && couponCode ? couponCode : null;
+}
+
 export default async function CommandPage({ searchParams }: CommandPageProps) {
   const session = await requireSession();
   const params = await searchParams;
@@ -105,6 +150,10 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
     ? productMessages[params.product as keyof typeof productMessages]
     : undefined;
   const canManageProducts = session.role !== "VIEWER";
+  const orderMessage = params?.order
+    ? orderMessages[params.order as keyof typeof orderMessages]
+    : undefined;
+  const canManageOrders = session.role !== "VIEWER";
   const enabledModules = await prisma.companyModule.findMany({
     where: { companyId: session.company.id },
     include: { module: true },
@@ -148,6 +197,32 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
       take: 8
     }),
     prisma.product.count({
+      where: {
+        companyId: session.company.id,
+        active: true,
+        deletedAt: null
+      }
+    })
+  ]);
+  const sellableProducts = products.filter((product) => product.sellable);
+  const [orders, orderCount] = await Promise.all([
+    prisma.order.findMany({
+      where: {
+        companyId: session.company.id,
+        active: true,
+        deletedAt: null
+      },
+      include: {
+        customer: true,
+        items: {
+          take: 1,
+          include: { product: true }
+        }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 8
+    }),
+    prisma.order.count({
       where: {
         companyId: session.company.id,
         active: true,
@@ -381,6 +456,161 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
             ) : (
               <p className="rounded border border-dashed border-white/15 p-4 text-sm text-slate-400">
                 Aun no hay clientes registrados.
+              </p>
+            )}
+          </div>
+
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-sm text-slate-400">Ventas</p>
+                <h2 className="text-2xl font-semibold">Pedidos</h2>
+              </div>
+              <span className="rounded border border-white/15 bg-white/5 px-3 py-1 text-sm text-slate-300">
+                {orderCount} registrados
+              </span>
+            </div>
+
+            {orderMessage ? (
+              <p
+                className={`mb-4 rounded border px-3 py-2 text-sm ${
+                  orderMessage.tone === "success"
+                    ? "border-command-green/40 bg-command-green/10 text-command-green"
+                    : "border-red-400/40 bg-red-400/10 text-red-200"
+                }`}
+              >
+                {orderMessage.text}
+              </p>
+            ) : null}
+
+            {canManageOrders ? (
+              <form action="/api/orders" method="post" className="mb-4 grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4 md:grid-cols-2">
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Cliente
+                  <select
+                    name="customerId"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  >
+                    <option value="">Consumidor final</option>
+                    {customers.map((customer) => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Producto
+                  <select
+                    name="productId"
+                    required
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  >
+                    <option value="">Seleccionar producto</option>
+                    {sellableProducts.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Cantidad
+                  <input
+                    name="quantity"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    defaultValue="1"
+                    required
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Precio unitario
+                  <input
+                    name="unitPrice"
+                    type="number"
+                    min="0"
+                    step="1"
+                    required
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Cupon
+                  <input
+                    name="couponCode"
+                    maxLength={60}
+                    placeholder="Ej: LANZAMIENTO10"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Descuento
+                  <input
+                    name="discount"
+                    type="number"
+                    min="0"
+                    step="1"
+                    defaultValue="0"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Impuesto
+                  <input
+                    name="tax"
+                    type="number"
+                    min="0"
+                    step="1"
+                    defaultValue="0"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <button className="self-end rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white md:w-fit">
+                  Registrar pedido
+                </button>
+              </form>
+            ) : null}
+
+            {orders.length ? (
+              <div className="grid gap-3">
+                {orders.map((order) => {
+                  const couponCode = couponFromMetadata(order.metadata);
+                  return (
+                    <article key={order.id} className="rounded border border-white/10 bg-white/[0.035] p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="font-semibold">{order.code}</h3>
+                          <p className="mt-1 text-sm text-slate-400">
+                            {order.customer?.name ?? "Consumidor final"} · {order.items[0]?.product?.name ?? order.items[0]?.description ?? "Sin items"}
+                          </p>
+                        </div>
+                        <span className="rounded border border-command-green/30 bg-command-green/10 px-3 py-1 text-sm text-command-green">
+                          {money(order.total)}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                        <span className="rounded bg-white/10 px-2 py-1 text-slate-300">{order.status}</span>
+                        {Number(order.discount.toString()) > 0 ? (
+                          <span className="rounded bg-white/10 px-2 py-1 text-slate-300">
+                            Descuento {money(order.discount)}
+                          </span>
+                        ) : null}
+                        {couponCode ? (
+                          <span className="rounded bg-command-cyan/10 px-2 py-1 text-command-cyan">
+                            Cupon {couponCode}
+                          </span>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="rounded border border-dashed border-white/15 p-4 text-sm text-slate-400">
+                Aun no hay pedidos registrados.
               </p>
             )}
           </div>
