@@ -6,6 +6,7 @@ type CommandPageProps = {
   searchParams?: Promise<{
     password?: string;
     user?: string;
+    customer?: string;
   }>;
 };
 
@@ -47,6 +48,25 @@ const userMessages = {
   }
 } as const;
 
+const customerMessages = {
+  created: {
+    tone: "success",
+    text: "Cliente registrado correctamente."
+  },
+  invalid: {
+    tone: "error",
+    text: "Completa el nombre y revisa que el correo sea valido."
+  },
+  forbidden: {
+    tone: "error",
+    text: "Tu rol no permite registrar clientes."
+  },
+  duplicate: {
+    tone: "error",
+    text: "No pudimos registrar el cliente. Revisa si el codigo ya existe."
+  }
+} as const;
+
 export default async function CommandPage({ searchParams }: CommandPageProps) {
   const session = await requireSession();
   const params = await searchParams;
@@ -57,6 +77,10 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
     ? userMessages[params.user as keyof typeof userMessages]
     : undefined;
   const canManageUsers = session.role === "OWNER" || session.role === "ADMIN";
+  const customerMessage = params?.customer
+    ? customerMessages[params.customer as keyof typeof customerMessages]
+    : undefined;
+  const canManageCustomers = session.role !== "VIEWER";
   const enabledModules = await prisma.companyModule.findMany({
     where: { companyId: session.company.id },
     include: { module: true },
@@ -71,6 +95,24 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
     include: { user: true },
     orderBy: { createdAt: "asc" }
   });
+  const [customers, customerCount] = await Promise.all([
+    prisma.customer.findMany({
+      where: {
+        companyId: session.company.id,
+        active: true,
+        deletedAt: null
+      },
+      orderBy: { createdAt: "desc" },
+      take: 8
+    }),
+    prisma.customer.count({
+      where: {
+        companyId: session.company.id,
+        active: true,
+        deletedAt: null
+      }
+    })
+  ]);
 
   const moduleState = new Map(enabledModules.map((item) => [item.module.key, item.enabled]));
 
@@ -189,6 +231,116 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
                 </article>
               );
             })}
+          </div>
+
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-sm text-slate-400">Comercial</p>
+                <h2 className="text-2xl font-semibold">Clientes</h2>
+              </div>
+              <span className="rounded border border-white/15 bg-white/5 px-3 py-1 text-sm text-slate-300">
+                {customerCount} registrados
+              </span>
+            </div>
+
+            {customerMessage ? (
+              <p
+                className={`mb-4 rounded border px-3 py-2 text-sm ${
+                  customerMessage.tone === "success"
+                    ? "border-command-green/40 bg-command-green/10 text-command-green"
+                    : "border-red-400/40 bg-red-400/10 text-red-200"
+                }`}
+              >
+                {customerMessage.text}
+              </p>
+            ) : null}
+
+            {canManageCustomers ? (
+              <form action="/api/customers" method="post" className="mb-4 grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4 md:grid-cols-2">
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Nombre del cliente
+                  <input
+                    name="name"
+                    required
+                    minLength={2}
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Codigo interno
+                  <input
+                    name="code"
+                    maxLength={40}
+                    placeholder="Opcional"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Correo
+                  <input
+                    name="email"
+                    type="email"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Telefono
+                  <input
+                    name="phone"
+                    maxLength={40}
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
+                  Etiquetas
+                  <input
+                    name="tags"
+                    maxLength={240}
+                    placeholder="mayorista, frecuente, credito"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <button className="rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white md:w-fit">
+                  Registrar cliente
+                </button>
+              </form>
+            ) : null}
+
+            {customers.length ? (
+              <div className="grid gap-3">
+                {customers.map((customer) => (
+                  <article key={customer.id} className="rounded border border-white/10 bg-white/[0.035] p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold">{customer.name}</h3>
+                        <p className="mt-1 text-sm text-slate-400">
+                          {[customer.email, customer.phone].filter(Boolean).join(" · ") || "Sin datos de contacto"}
+                        </p>
+                      </div>
+                      {customer.code ? (
+                        <span className="rounded border border-command-cyan/30 bg-command-cyan/10 px-3 py-1 text-xs text-command-cyan">
+                          {customer.code}
+                        </span>
+                      ) : null}
+                    </div>
+                    {customer.tags.length ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {customer.tags.map((tag) => (
+                          <span key={tag} className="rounded bg-white/10 px-2 py-1 text-xs text-slate-300">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded border border-dashed border-white/15 p-4 text-sm text-slate-400">
+                Aun no hay clientes registrados.
+              </p>
+            )}
           </div>
 
           <div className="mt-8 border-t border-white/10 pt-6">
