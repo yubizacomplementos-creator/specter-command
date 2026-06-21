@@ -5,6 +5,7 @@ import { prisma } from "@/server/db";
 type CommandPageProps = {
   searchParams?: Promise<{
     password?: string;
+    user?: string;
   }>;
 };
 
@@ -23,16 +24,52 @@ const passwordMessages = {
   }
 } as const;
 
+const userMessages = {
+  invited: {
+    tone: "success",
+    text: "Usuario invitado correctamente. Le enviamos un enlace para crear su contrasena."
+  },
+  invalid: {
+    tone: "error",
+    text: "Completa nombre, correo valido y rol."
+  },
+  forbidden: {
+    tone: "error",
+    text: "Tu rol no permite invitar usuarios."
+  },
+  email_unconfigured: {
+    tone: "error",
+    text: "El envio de correo no esta configurado."
+  },
+  email_failed: {
+    tone: "error",
+    text: "No pudimos enviar la invitacion. Revisa Resend o intenta de nuevo."
+  }
+} as const;
+
 export default async function CommandPage({ searchParams }: CommandPageProps) {
   const session = await requireSession();
   const params = await searchParams;
   const passwordMessage = params?.password
     ? passwordMessages[params.password as keyof typeof passwordMessages]
     : undefined;
+  const userMessage = params?.user
+    ? userMessages[params.user as keyof typeof userMessages]
+    : undefined;
+  const canManageUsers = session.role === "OWNER" || session.role === "ADMIN";
   const enabledModules = await prisma.companyModule.findMany({
     where: { companyId: session.company.id },
     include: { module: true },
     orderBy: { module: { name: "asc" } }
+  });
+  const memberships = await prisma.membership.findMany({
+    where: {
+      companyId: session.company.id,
+      active: true,
+      deletedAt: null
+    },
+    include: { user: true },
+    orderBy: { createdAt: "asc" }
   });
 
   const moduleState = new Map(enabledModules.map((item) => [item.module.key, item.enabled]));
@@ -152,6 +189,82 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
                 </article>
               );
             })}
+          </div>
+
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-sm text-slate-400">Equipo</p>
+                <h2 className="text-2xl font-semibold">Usuarios y roles</h2>
+              </div>
+              <span className="rounded border border-white/15 bg-white/5 px-3 py-1 text-sm text-slate-300">
+                {memberships.length} activos
+              </span>
+            </div>
+
+            {userMessage ? (
+              <p
+                className={`mb-4 rounded border px-3 py-2 text-sm ${
+                  userMessage.tone === "success"
+                    ? "border-command-green/40 bg-command-green/10 text-command-green"
+                    : "border-red-400/40 bg-red-400/10 text-red-200"
+                }`}
+              >
+                {userMessage.text}
+              </p>
+            ) : null}
+
+            {canManageUsers ? (
+              <form action="/api/users/invite" method="post" className="mb-4 grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4 md:grid-cols-[1fr_1fr_160px_auto]">
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Nombre
+                  <input
+                    name="name"
+                    required
+                    minLength={2}
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Correo
+                  <input
+                    name="email"
+                    type="email"
+                    required
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Rol
+                  <select
+                    name="role"
+                    defaultValue="OPERATOR"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  >
+                    <option value="ADMIN">ADMIN</option>
+                    <option value="OPERATOR">OPERATOR</option>
+                    <option value="VIEWER">VIEWER</option>
+                  </select>
+                </label>
+                <button className="self-end rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white">
+                  Invitar
+                </button>
+              </form>
+            ) : null}
+
+            <div className="grid gap-3">
+              {memberships.map((membership) => (
+                <article key={membership.id} className="flex flex-wrap items-center justify-between gap-3 rounded border border-white/10 bg-white/[0.035] p-4">
+                  <div>
+                    <h3 className="font-semibold">{membership.user.name}</h3>
+                    <p className="mt-1 text-sm text-slate-400">{membership.user.email}</p>
+                  </div>
+                  <span className="rounded border border-command-cyan/30 bg-command-cyan/10 px-3 py-1 text-xs text-command-cyan">
+                    {membership.role}
+                  </span>
+                </article>
+              ))}
+            </div>
           </div>
         </section>
       </section>
