@@ -4,7 +4,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/server/audit";
 import { prisma } from "@/server/db";
 import { getCurrentSession } from "@/server/session";
-import { publicUrl } from "@/server/url";
+import { publicUrl, redirectBackUrl } from "@/server/url";
 
 const orderSchema = z.object({
   customerId: z.string().optional(),
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (session.role === MembershipRole.VIEWER) {
-    return NextResponse.redirect(publicUrl(request, "/command?order=forbidden"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { order: "forbidden" }), 303);
   }
 
   const form = await request.formData();
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!parsed.success) {
-    return NextResponse.redirect(publicUrl(request, "/command?order=invalid"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { order: "invalid" }), 303);
   }
 
   const product = await prisma.product.findFirst({
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!product || !product.sellable) {
-    return NextResponse.redirect(publicUrl(request, "/command?order=invalid_product"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { order: "invalid_product" }), 303);
   }
 
   const customerId = cleanOptional(parsed.data.customerId);
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!customer) {
-      return NextResponse.redirect(publicUrl(request, "/command?order=invalid_customer"), 303);
+      return NextResponse.redirect(redirectBackUrl(request, "/command", { order: "invalid_customer" }), 303);
     }
   }
 
@@ -178,12 +178,12 @@ export async function POST(request: NextRequest) {
       userAgent: request.headers.get("user-agent") ?? undefined
     });
 
-    return NextResponse.redirect(publicUrl(request, "/command?order=created"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { order: "created" }), 303);
   } catch (error) {
     if (error instanceof Error && error.message === insufficientStockError) {
-      return NextResponse.redirect(publicUrl(request, "/command?order=insufficient_stock"), 303);
+      return NextResponse.redirect(redirectBackUrl(request, "/command", { order: "insufficient_stock" }), 303);
     }
 
-    return NextResponse.redirect(publicUrl(request, "/command?order=failed"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { order: "failed" }), 303);
   }
 }

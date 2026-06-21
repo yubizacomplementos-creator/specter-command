@@ -13,7 +13,7 @@ const navItems = [
   ["Resumen", "/command"],
   ["Clientes", "/command/customers"],
   ["Productos", "/command/products"],
-  ["Pedidos", "/command#pedidos"],
+  ["Pedidos", "/command/orders"],
   ["Inventario", "/command#inventario"],
   ["Reportes", "/command#reportes"],
   ["Integraciones", "/command#integraciones"]

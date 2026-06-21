@@ -4,7 +4,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/server/audit";
 import { prisma } from "@/server/db";
 import { getCurrentSession } from "@/server/session";
-import { publicUrl } from "@/server/url";
+import { publicUrl, redirectBackUrl } from "@/server/url";
 
 const statusSchema = z.object({
   orderId: z.string().min(1),
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (session.role === MembershipRole.VIEWER) {
-    return NextResponse.redirect(publicUrl(request, "/command?order=forbidden"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { order: "forbidden" }), 303);
   }
 
   const form = await request.formData();
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!parsed.success) {
-    return NextResponse.redirect(publicUrl(request, "/command?order=invalid_status"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { order: "invalid_status" }), 303);
   }
 
   const order = await prisma.order.findFirst({
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!order || order.status !== OrderStatus.OPEN) {
-    return NextResponse.redirect(publicUrl(request, "/command?order=invalid_status"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { order: "invalid_status" }), 303);
   }
 
   const metadata = metadataObject(order.metadata);
@@ -121,8 +121,8 @@ export async function POST(request: NextRequest) {
       userAgent: request.headers.get("user-agent") ?? undefined
     });
 
-    return NextResponse.redirect(publicUrl(request, `/command?order=${updated.status.toLowerCase()}`), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { order: updated.status.toLowerCase() }), 303);
   } catch {
-    return NextResponse.redirect(publicUrl(request, "/command?order=status_failed"), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command", { order: "status_failed" }), 303);
   }
 }
