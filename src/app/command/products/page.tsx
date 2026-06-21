@@ -19,7 +19,10 @@ const productMessages = {
   import_invalid: { tone: "error", text: "El archivo CSV no tiene productos validos para importar." },
   shopify_synced: { tone: "success", text: "Productos sincronizados desde Shopify." },
   shopify_missing: { tone: "error", text: "Configura dominio y token de Shopify en Integraciones antes de sincronizar." },
-  shopify_failed: { tone: "error", text: "Shopify no respondio correctamente. Revisa dominio, token y permisos." }
+  shopify_failed: { tone: "error", text: "Shopify no respondio correctamente. Revisa dominio, token y permisos." },
+  shopify_published: { tone: "success", text: "Producto publicado o actualizado en Shopify." },
+  shopify_publish_invalid: { tone: "error", text: "No encontramos el producto para publicar." },
+  shopify_publish_failed: { tone: "error", text: "No pudimos publicar en Shopify. Revisa permisos write_products y el token." }
 } as const;
 
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
@@ -186,6 +189,14 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
                     </span>
                   ) : null}
                 </div>
+                {canManageProducts ? (
+                  <form action="/api/shopify/products/publish" method="post" className="mt-3">
+                    <input type="hidden" name="productId" value={product.id} />
+                    <button className="rounded-md border border-cyan-200 px-3 py-2 text-xs font-semibold text-cyan-700 hover:border-cyan-700">
+                      Publicar en Shopify
+                    </button>
+                  </form>
+                ) : null}
               </article>
             )) : (
               <p className="rounded-md border border-dashed border-slate-200 p-4 text-sm text-slate-500">
