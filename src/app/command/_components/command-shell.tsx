@@ -16,6 +16,7 @@ const navItems = [
   ["Pedidos", "/command/orders"],
   ["Inventario", "/command/inventory"],
   ["Reportes", "/command/reports"],
+  ["Bot / IA", "/command/bot"],
   ["Integraciones", "/command/settings"]
 ] as const;
 
