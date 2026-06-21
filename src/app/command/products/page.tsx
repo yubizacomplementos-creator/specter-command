@@ -16,7 +16,10 @@ const productMessages = {
   forbidden: { tone: "error", text: "Tu rol no permite registrar productos." },
   duplicate: { tone: "error", text: "No pudimos registrar el producto. Revisa si el SKU ya existe." },
   imported: { tone: "success", text: "Productos importados correctamente." },
-  import_invalid: { tone: "error", text: "El archivo CSV no tiene productos validos para importar." }
+  import_invalid: { tone: "error", text: "El archivo CSV no tiene productos validos para importar." },
+  shopify_synced: { tone: "success", text: "Productos sincronizados desde Shopify." },
+  shopify_missing: { tone: "error", text: "Configura dominio y token de Shopify en Integraciones antes de sincronizar." },
+  shopify_failed: { tone: "error", text: "Shopify no respondio correctamente. Revisa dominio, token y permisos." }
 } as const;
 
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
@@ -42,14 +45,27 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         }
       : {})
   };
-  const [products, productCount] = await Promise.all([
+  const [products, productCount, shopifySetting] = await Promise.all([
     prisma.product.findMany({
       where,
       orderBy: { createdAt: "desc" },
       take: 50
     }),
-    prisma.product.count({ where })
+    prisma.product.count({ where }),
+    prisma.integrationSetting.findUnique({
+      where: {
+        companyId_provider: {
+          companyId: session.company.id,
+          provider: "shopify"
+        }
+      }
+    })
   ]);
+  const shopifyConfig = shopifySetting?.publicConfig;
+  const hasShopifyDomain =
+    shopifyConfig && typeof shopifyConfig === "object" && !Array.isArray(shopifyConfig)
+      ? Boolean((shopifyConfig as Record<string, unknown>).shopDomain)
+      : false;
 
   return (
     <CommandShell companyName={session.company.name} userEmail={session.user.email} role={session.role}>
@@ -89,7 +105,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         </section>
 
         {canManageProducts ? (
-          <section className="grid gap-4 lg:grid-cols-2">
+          <section className="grid gap-4 lg:grid-cols-3">
             <form action="/api/products" method="post" className="rounded-lg border border-slate-200 bg-white p-5">
               <h2 className="text-lg font-semibold">Registrar producto</h2>
               <div className="mt-4 grid gap-3">
@@ -116,6 +132,21 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
                 <textarea name="csvText" rows={5} placeholder={'sku,nombre,categoria,controlaInventario,vendible,insumo,produccion\nSKU-001,Proteina vainilla,suplementos,si,si,no,no'} className="rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-cyan-600" />
                 <button className="rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">
                   Importar productos
+                </button>
+              </div>
+            </form>
+
+            <form action="/api/shopify/products/sync" method="post" className="rounded-lg border border-slate-200 bg-white p-5">
+              <h2 className="text-lg font-semibold">Shopify</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Trae los productos y variantes recientes desde Shopify usando la credencial guardada.
+              </p>
+              <div className="mt-4 grid gap-3">
+                <p className={`rounded-md px-3 py-2 text-sm ${hasShopifyDomain ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                  {hasShopifyDomain ? "Configuracion detectada" : "Pendiente en Integraciones"}
+                </p>
+                <button className="rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">
+                  Sincronizar Shopify
                 </button>
               </div>
             </form>
