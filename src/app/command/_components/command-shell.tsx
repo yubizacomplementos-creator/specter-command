@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { MembershipRole } from "@prisma/client";
 import type { ReactNode } from "react";
+import { roleLabel } from "@/lib/roles";
 
 type CommandShellProps = {
   children: ReactNode;
@@ -28,7 +29,7 @@ export function CommandShell({ children, companyName, userEmail, role }: Command
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-700">Specter</p>
             <h1 className="mt-2 text-xl font-semibold">{companyName}</h1>
-            <p className="mt-1 text-sm text-slate-500">{role}</p>
+            <p className="mt-1 text-sm text-slate-500">{roleLabel(role)}</p>
           </div>
 
           <nav className="mt-8 grid gap-1">

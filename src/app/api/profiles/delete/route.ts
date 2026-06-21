@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import { AuditAction, MembershipRole } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -7,7 +8,9 @@ import { getCurrentSession } from "@/server/session";
 import { publicUrl } from "@/server/url";
 
 const deleteSchema = z.object({
-  companyId: z.string().min(1)
+  companyId: z.string().min(1),
+  confirmation: z.string(),
+  password: z.string().min(8)
 });
 
 export async function POST(request: NextRequest) {
@@ -19,21 +22,27 @@ export async function POST(request: NextRequest) {
 
   const form = await request.formData();
   const parsed = deleteSchema.safeParse({
-    companyId: form.get("companyId")
+    companyId: form.get("companyId"),
+    confirmation: form.get("confirmation"),
+    password: form.get("password")
   });
 
   if (!parsed.success) {
     return NextResponse.redirect(publicUrl(request, "/profiles?profile=delete_invalid"), 303);
   }
 
-  const [membership, activeCount] = await Promise.all([
+  if (parsed.data.confirmation.trim().toUpperCase() !== "ELIMINAR") {
+    return NextResponse.redirect(publicUrl(request, "/profiles?profile=delete_confirm"), 303);
+  }
+
+  const [membership, activeCount, user] = await Promise.all([
     prisma.membership.findFirst({
       where: {
         userId: session.user.id,
         companyId: parsed.data.companyId,
         active: true,
         deletedAt: null,
-        role: MembershipRole.OWNER,
+        role: { in: [MembershipRole.OWNER, MembershipRole.ADMIN] },
         company: {
           active: true,
           deletedAt: null
@@ -51,6 +60,10 @@ export async function POST(request: NextRequest) {
           deletedAt: null
         }
       }
+    }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { passwordHash: true }
     })
   ]);
 
@@ -60,6 +73,11 @@ export async function POST(request: NextRequest) {
 
   if (activeCount <= 1) {
     return NextResponse.redirect(publicUrl(request, "/profiles?profile=delete_last"), 303);
+  }
+
+  const passwordOk = user ? await bcrypt.compare(parsed.data.password, user.passwordHash) : false;
+  if (!passwordOk) {
+    return NextResponse.redirect(publicUrl(request, "/profiles?profile=delete_password"), 303);
   }
 
   const now = new Date();
@@ -90,7 +108,8 @@ export async function POST(request: NextRequest) {
     entityId: membership.companyId,
     after: {
       name: membership.company.name,
-      softDeleted: true
+      softDeleted: true,
+      confirmedWithPassword: true
     }
   });
 
