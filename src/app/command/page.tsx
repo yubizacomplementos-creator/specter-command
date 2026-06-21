@@ -68,6 +68,14 @@ const customerMessages = {
   duplicate: {
     tone: "error",
     text: "No pudimos registrar el cliente. Revisa si el codigo ya existe."
+  },
+  imported: {
+    tone: "success",
+    text: "Clientes importados correctamente."
+  },
+  import_invalid: {
+    tone: "error",
+    text: "El archivo CSV no tiene clientes validos para importar."
   }
 } as const;
 
@@ -145,6 +153,14 @@ const inventoryMessages = {
   failed: {
     tone: "error",
     text: "No pudimos actualizar el inventario. Intenta de nuevo."
+  },
+  imported: {
+    tone: "success",
+    text: "Inventario importado correctamente."
+  },
+  import_invalid: {
+    tone: "error",
+    text: "El archivo CSV no tiene inventario valido para importar."
   }
 } as const;
 
@@ -178,11 +194,11 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
   const customerMessage = params?.customer
     ? customerMessages[params.customer as keyof typeof customerMessages]
     : undefined;
+  const importCount = params?.count ? Number(params.count) : undefined;
   const canManageCustomers = session.role !== "VIEWER";
   const productMessage = params?.product
     ? productMessages[params.product as keyof typeof productMessages]
     : undefined;
-  const productImportCount = params?.count ? Number(params.count) : undefined;
   const canManageProducts = session.role !== "VIEWER";
   const orderMessage = params?.order
     ? orderMessages[params.order as keyof typeof orderMessages]
@@ -428,58 +444,85 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
                 }`}
               >
                 {customerMessage.text}
+                {params?.customer === "imported" && importCount ? ` Total: ${importCount}.` : ""}
               </p>
             ) : null}
 
             {canManageCustomers ? (
-              <form action="/api/customers" method="post" className="mb-4 grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4 md:grid-cols-2">
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Nombre del cliente
+              <div className="mb-4 grid gap-4">
+                <form action="/api/customers" method="post" className="grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4 md:grid-cols-2">
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Nombre del cliente
+                    <input
+                      name="name"
+                      required
+                      minLength={2}
+                      className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Codigo interno
+                    <input
+                      name="code"
+                      maxLength={40}
+                      placeholder="Opcional"
+                      className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Correo
+                    <input
+                      name="email"
+                      type="email"
+                      className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Telefono
+                    <input
+                      name="phone"
+                      maxLength={40}
+                      className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
+                    Etiquetas
+                    <input
+                      name="tags"
+                      maxLength={240}
+                      placeholder="mayorista, frecuente, credito"
+                      className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    />
+                  </label>
+                  <button className="rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white md:w-fit">
+                    Registrar cliente
+                  </button>
+                </form>
+
+                <form action="/api/customers/import" method="post" encType="multipart/form-data" className="grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4">
+                  <div>
+                    <h3 className="font-semibold">Cargue masivo de clientes</h3>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Columnas: codigo,nombre,correo,telefono,etiquetas. Separa etiquetas con |.
+                    </p>
+                  </div>
                   <input
-                    name="name"
-                    required
-                    minLength={2}
-                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    name="csvFile"
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-sm text-slate-300 file:mr-3 file:rounded file:border-0 file:bg-command-cyan file:px-3 file:py-1 file:text-command-ink"
                   />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Codigo interno
-                  <input
-                    name="code"
-                    maxLength={40}
-                    placeholder="Opcional"
-                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  <textarea
+                    name="csvText"
+                    rows={4}
+                    placeholder={'codigo,nombre,correo,telefono,etiquetas\nCLI-001,Cliente prueba,cliente@correo.com,3001234567,mayorista|frecuente'}
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-sm text-white outline-none focus:border-command-cyan"
                   />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Correo
-                  <input
-                    name="email"
-                    type="email"
-                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
-                  />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Telefono
-                  <input
-                    name="phone"
-                    maxLength={40}
-                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
-                  />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
-                  Etiquetas
-                  <input
-                    name="tags"
-                    maxLength={240}
-                    placeholder="mayorista, frecuente, credito"
-                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
-                  />
-                </label>
-                <button className="rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white md:w-fit">
-                  Registrar cliente
-                </button>
-              </form>
+                  <button className="rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white md:w-fit">
+                    Importar clientes
+                  </button>
+                </form>
+              </div>
             ) : null}
 
             {customers.length ? (
@@ -538,71 +581,98 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
                 }`}
               >
                 {inventoryMessage.text}
+                {params?.inventory === "imported" && importCount ? ` Total: ${importCount}.` : ""}
               </p>
             ) : null}
 
             {canManageInventory ? (
-              <form action="/api/inventory" method="post" className="mb-4 grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4 md:grid-cols-2">
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Producto con stock
-                  <select
-                    name="productId"
-                    required
-                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
-                  >
-                    <option value="">Seleccionar producto</option>
-                    {stockProducts.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Ubicacion
+              <div className="mb-4 grid gap-4">
+                <form action="/api/inventory" method="post" className="grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4 md:grid-cols-2">
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Producto con stock
+                    <select
+                      name="productId"
+                      required
+                      className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    >
+                      <option value="">Seleccionar producto</option>
+                      {stockProducts.map((product) => (
+                        <option key={product.id} value={product.id}>
+                          {product.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Ubicacion
+                    <input
+                      name="locationKey"
+                      required
+                      minLength={2}
+                      defaultValue="principal"
+                      className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Cantidad disponible
+                    <input
+                      name="quantity"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Costo unitario
+                    <input
+                      name="unitCost"
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="Opcional"
+                      className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
+                    Motivo
+                    <input
+                      name="reason"
+                      maxLength={160}
+                      placeholder="conteo inicial, compra, ajuste"
+                      className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    />
+                  </label>
+                  <button className="rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white md:w-fit">
+                    Actualizar inventario
+                  </button>
+                </form>
+
+                <form action="/api/inventory/import" method="post" encType="multipart/form-data" className="grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4">
+                  <div>
+                    <h3 className="font-semibold">Cargue masivo de inventario</h3>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Columnas: sku,ubicacion,cantidad,costoUnitario,motivo. El SKU debe existir y controlar inventario.
+                    </p>
+                  </div>
                   <input
-                    name="locationKey"
-                    required
-                    minLength={2}
-                    defaultValue="principal"
-                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                    name="csvFile"
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-sm text-slate-300 file:mr-3 file:rounded file:border-0 file:bg-command-cyan file:px-3 file:py-1 file:text-command-ink"
                   />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Cantidad disponible
-                  <input
-                    name="quantity"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    required
-                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  <textarea
+                    name="csvText"
+                    rows={4}
+                    placeholder={'sku,ubicacion,cantidad,costoUnitario,motivo\nSKU-001,principal,25,42000,compra inicial'}
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-sm text-white outline-none focus:border-command-cyan"
                   />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300">
-                  Costo unitario
-                  <input
-                    name="unitCost"
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="Opcional"
-                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
-                  />
-                </label>
-                <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
-                  Motivo
-                  <input
-                    name="reason"
-                    maxLength={160}
-                    placeholder="conteo inicial, compra, ajuste"
-                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
-                  />
-                </label>
-                <button className="rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white md:w-fit">
-                  Actualizar inventario
-                </button>
-              </form>
+                  <button className="rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white md:w-fit">
+                    Importar inventario
+                  </button>
+                </form>
+              </div>
             ) : null}
 
             {inventoryItems.length ? (
@@ -806,7 +876,7 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
                 }`}
               >
                 {productMessage.text}
-                {params?.product === "imported" && productImportCount ? ` Total: ${productImportCount}.` : ""}
+                {params?.product === "imported" && importCount ? ` Total: ${importCount}.` : ""}
               </p>
             ) : null}
 
