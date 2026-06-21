@@ -40,7 +40,8 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
           OR: [
             { name: { contains: searchTerm, mode: "insensitive" as const } },
             { sku: { contains: searchTerm, mode: "insensitive" as const } },
-            { categoryKey: { contains: searchTerm, mode: "insensitive" as const } }
+            { categoryKey: { contains: searchTerm, mode: "insensitive" as const } },
+            { inventoryItems: { some: { locationKey: { contains: searchTerm, mode: "insensitive" as const } } } }
           ]
         }
       : {})
@@ -48,6 +49,12 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   const [products, productCount, shopifySetting] = await Promise.all([
     prisma.product.findMany({
       where,
+      include: {
+        inventoryItems: {
+          where: { active: true, deletedAt: null },
+          orderBy: { locationKey: "asc" }
+        }
+      },
       orderBy: { createdAt: "desc" },
       take: 50
     }),
@@ -112,6 +119,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
                 <input name="name" required minLength={2} placeholder="Nombre" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
                 <input name="sku" maxLength={60} placeholder="SKU opcional" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
                 <input name="categoryKey" required minLength={2} placeholder="Categoria" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                <input name="locationKey" maxLength={80} placeholder="Ubicacion fisica: vitrina-1, bodega-a, caja-aretes" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
                 <div className="grid gap-2 rounded-md border border-slate-200 p-3 text-sm text-slate-600 sm:grid-cols-2">
                   <label className="flex items-center gap-2"><input name="controlsStock" type="checkbox" /> Controla inventario</label>
                   <label className="flex items-center gap-2"><input name="usableAsInput" type="checkbox" /> Puede ser insumo</label>
@@ -172,6 +180,11 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
                   {product.controlsStock ? <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">Inventario</span> : null}
                   {product.usableAsInput ? <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">Insumo</span> : null}
                   {product.requiresProduction ? <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">Produccion</span> : null}
+                  {product.inventoryItems.length ? (
+                    <span className="rounded-md bg-cyan-50 px-2 py-1 text-cyan-700">
+                      Ubicacion: {product.inventoryItems.map((item) => item.locationKey).join(", ")}
+                    </span>
+                  ) : null}
                 </div>
               </article>
             )) : (

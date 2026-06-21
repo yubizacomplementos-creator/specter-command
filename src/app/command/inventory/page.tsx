@@ -46,7 +46,8 @@ export default async function InventoryPage({ searchParams }: InventoryPageProps
           OR: [
             { locationKey: { contains: searchTerm, mode: "insensitive" as const } },
             { product: { name: { contains: searchTerm, mode: "insensitive" as const } } },
-            { product: { sku: { contains: searchTerm, mode: "insensitive" as const } } }
+            { product: { sku: { contains: searchTerm, mode: "insensitive" as const } } },
+            { product: { categoryKey: { contains: searchTerm, mode: "insensitive" as const } } }
           ]
         }
       : {})
@@ -95,7 +96,7 @@ export default async function InventoryPage({ searchParams }: InventoryPageProps
             <input
               name="q"
               defaultValue={searchTerm}
-              placeholder="Buscar por producto, SKU o ubicacion"
+              placeholder="Buscar por producto, SKU, categoria o ubicacion"
               className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600"
             />
             <button className="rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">
@@ -125,7 +126,7 @@ export default async function InventoryPage({ searchParams }: InventoryPageProps
                     <option key={product.id} value={product.id}>{product.name}</option>
                   ))}
                 </select>
-                <input name="locationKey" required minLength={2} defaultValue="principal" placeholder="Ubicacion" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                <input name="locationKey" required minLength={2} defaultValue="principal" placeholder="Ubicacion fisica: vitrina-1, bodega-a, caja-aretes" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
                 <input name="quantity" type="number" min="0" step="0.01" required placeholder="Cantidad disponible" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
                 <input name="unitCost" type="number" min="0" step="1" placeholder="Costo unitario opcional" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
                 <input name="reason" maxLength={160} placeholder="Motivo: compra, conteo, ajuste" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
@@ -157,7 +158,7 @@ export default async function InventoryPage({ searchParams }: InventoryPageProps
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="font-semibold">{item.product.name}</h3>
-                    <p className="mt-1 text-sm text-slate-500">{item.product.sku ?? "Sin SKU"} · {item.locationKey}</p>
+                    <p className="mt-1 text-sm text-slate-500">{item.product.sku ?? "Sin SKU"} - Ubicacion: {item.locationKey}</p>
                   </div>
                   <span className="rounded-md bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">
                     {item.quantity.toString()} unidades

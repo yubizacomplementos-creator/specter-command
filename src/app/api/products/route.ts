@@ -10,6 +10,7 @@ const productSchema = z.object({
   sku: z.string().max(60).optional(),
   name: z.string().min(2).max(180),
   categoryKey: z.string().min(2).max(80),
+  locationKey: z.string().max(80).optional(),
   controlsStock: z.boolean(),
   sellable: z.boolean(),
   usableAsInput: z.boolean(),
@@ -32,6 +33,10 @@ function checkboxValue(value: FormDataEntryValue | null) {
   return value === "on";
 }
 
+function locationKey(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
 export async function POST(request: NextRequest) {
   const session = await getCurrentSession();
 
@@ -48,6 +53,7 @@ export async function POST(request: NextRequest) {
     sku: form.get("sku"),
     name: form.get("name"),
     categoryKey: form.get("categoryKey"),
+    locationKey: form.get("locationKey"),
     controlsStock: checkboxValue(form.get("controlsStock")),
     sellable: !form.has("notSellable"),
     usableAsInput: checkboxValue(form.get("usableAsInput")),
@@ -59,20 +65,43 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const product = await prisma.product.create({
-      data: {
-        companyId: session.company.id,
-        sku: cleanOptional(parsed.data.sku),
-        name: parsed.data.name.trim(),
-        categoryKey: parsed.data.categoryKey.trim().toLowerCase().replace(/\s+/g, "-"),
-        controlsStock: parsed.data.controlsStock,
-        sellable: parsed.data.sellable,
-        usableAsInput: parsed.data.usableAsInput,
-        requiresProduction: parsed.data.requiresProduction,
-        controlsCost: parsed.data.controlsStock,
-        createdById: session.user.id,
-        updatedById: session.user.id
+    const requestedLocation = cleanOptional(parsed.data.locationKey);
+    const normalizedLocation = requestedLocation ? locationKey(requestedLocation) : null;
+    const controlsStock = parsed.data.controlsStock || Boolean(normalizedLocation);
+    const product = await prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({
+        data: {
+          companyId: session.company.id,
+          sku: cleanOptional(parsed.data.sku),
+          name: parsed.data.name.trim(),
+          categoryKey: parsed.data.categoryKey.trim().toLowerCase().replace(/\s+/g, "-"),
+          controlsStock,
+          sellable: parsed.data.sellable,
+          usableAsInput: parsed.data.usableAsInput,
+          requiresProduction: parsed.data.requiresProduction,
+          controlsCost: controlsStock,
+          attributes: normalizedLocation ? { primaryLocation: normalizedLocation } : {},
+          createdById: session.user.id,
+          updatedById: session.user.id
+        }
+      });
+
+      if (normalizedLocation) {
+        await tx.inventoryItem.create({
+          data: {
+            companyId: session.company.id,
+            productId: created.id,
+            locationKey: normalizedLocation,
+            quantity: 0,
+            metadata: {
+              reason: "ubicacion inicial",
+              updatedById: session.user.id
+            }
+          }
+        });
       }
+
+      return created;
     });
 
     await writeAuditLog({
@@ -88,14 +117,15 @@ export async function POST(request: NextRequest) {
         controlsStock: product.controlsStock,
         sellable: product.sellable,
         usableAsInput: product.usableAsInput,
-        requiresProduction: product.requiresProduction
+        requiresProduction: product.requiresProduction,
+        locationKey: normalizedLocation
       },
       ipAddress: clientIp(request),
       userAgent: request.headers.get("user-agent") ?? undefined
     });
 
-    return NextResponse.redirect(redirectBackUrl(request, "/command", { product: "created" }), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command/products", { product: "created" }), 303);
   } catch {
-    return NextResponse.redirect(redirectBackUrl(request, "/command", { product: "duplicate" }), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command/products", { product: "duplicate" }), 303);
   }
 }
