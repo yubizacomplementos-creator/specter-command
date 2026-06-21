@@ -7,6 +7,7 @@ type CommandPageProps = {
     password?: string;
     user?: string;
     customer?: string;
+    product?: string;
   }>;
 };
 
@@ -67,6 +68,25 @@ const customerMessages = {
   }
 } as const;
 
+const productMessages = {
+  created: {
+    tone: "success",
+    text: "Producto registrado correctamente."
+  },
+  invalid: {
+    tone: "error",
+    text: "Completa nombre y categoria."
+  },
+  forbidden: {
+    tone: "error",
+    text: "Tu rol no permite registrar productos."
+  },
+  duplicate: {
+    tone: "error",
+    text: "No pudimos registrar el producto. Revisa si el SKU ya existe."
+  }
+} as const;
+
 export default async function CommandPage({ searchParams }: CommandPageProps) {
   const session = await requireSession();
   const params = await searchParams;
@@ -81,6 +101,10 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
     ? customerMessages[params.customer as keyof typeof customerMessages]
     : undefined;
   const canManageCustomers = session.role !== "VIEWER";
+  const productMessage = params?.product
+    ? productMessages[params.product as keyof typeof productMessages]
+    : undefined;
+  const canManageProducts = session.role !== "VIEWER";
   const enabledModules = await prisma.companyModule.findMany({
     where: { companyId: session.company.id },
     include: { module: true },
@@ -106,6 +130,24 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
       take: 8
     }),
     prisma.customer.count({
+      where: {
+        companyId: session.company.id,
+        active: true,
+        deletedAt: null
+      }
+    })
+  ]);
+  const [products, productCount] = await Promise.all([
+    prisma.product.findMany({
+      where: {
+        companyId: session.company.id,
+        active: true,
+        deletedAt: null
+      },
+      orderBy: { createdAt: "desc" },
+      take: 8
+    }),
+    prisma.product.count({
       where: {
         companyId: session.company.id,
         active: true,
@@ -339,6 +381,116 @@ export default async function CommandPage({ searchParams }: CommandPageProps) {
             ) : (
               <p className="rounded border border-dashed border-white/15 p-4 text-sm text-slate-400">
                 Aun no hay clientes registrados.
+              </p>
+            )}
+          </div>
+
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-sm text-slate-400">Catalogo</p>
+                <h2 className="text-2xl font-semibold">Productos y servicios</h2>
+              </div>
+              <span className="rounded border border-white/15 bg-white/5 px-3 py-1 text-sm text-slate-300">
+                {productCount} registrados
+              </span>
+            </div>
+
+            {productMessage ? (
+              <p
+                className={`mb-4 rounded border px-3 py-2 text-sm ${
+                  productMessage.tone === "success"
+                    ? "border-command-green/40 bg-command-green/10 text-command-green"
+                    : "border-red-400/40 bg-red-400/10 text-red-200"
+                }`}
+              >
+                {productMessage.text}
+              </p>
+            ) : null}
+
+            {canManageProducts ? (
+              <form action="/api/products" method="post" className="mb-4 grid gap-3 rounded border border-white/10 bg-white/[0.035] p-4 md:grid-cols-2">
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Nombre
+                  <input
+                    name="name"
+                    required
+                    minLength={2}
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300">
+                  SKU
+                  <input
+                    name="sku"
+                    maxLength={60}
+                    placeholder="Opcional"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
+                  Categoria
+                  <input
+                    name="categoryKey"
+                    required
+                    minLength={2}
+                    placeholder="ej: suplementos, servicios, combos"
+                    className="rounded border border-white/10 bg-command-ink px-3 py-2 text-white outline-none focus:border-command-cyan"
+                  />
+                </label>
+                <div className="grid gap-3 rounded border border-white/10 p-3 text-sm text-slate-300 md:col-span-2 md:grid-cols-2">
+                  <label className="flex items-center gap-2">
+                    <input name="controlsStock" type="checkbox" className="h-4 w-4 accent-cyan-300" />
+                    Controla inventario
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input name="usableAsInput" type="checkbox" className="h-4 w-4 accent-cyan-300" />
+                    Puede ser insumo
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input name="requiresProduction" type="checkbox" className="h-4 w-4 accent-cyan-300" />
+                    Requiere produccion
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input name="notSellable" type="checkbox" className="h-4 w-4 accent-cyan-300" />
+                    No se vende directo
+                  </label>
+                </div>
+                <button className="rounded bg-command-cyan px-4 py-2 text-sm font-semibold text-command-ink hover:bg-white md:w-fit">
+                  Registrar producto
+                </button>
+              </form>
+            ) : null}
+
+            {products.length ? (
+              <div className="grid gap-3">
+                {products.map((product) => (
+                  <article key={product.id} className="rounded border border-white/10 bg-white/[0.035] p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold">{product.name}</h3>
+                        <p className="mt-1 text-sm text-slate-400">{product.categoryKey}</p>
+                      </div>
+                      {product.sku ? (
+                        <span className="rounded border border-command-cyan/30 bg-command-cyan/10 px-3 py-1 text-xs text-command-cyan">
+                          {product.sku}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                      <span className={`rounded px-2 py-1 ${product.sellable ? "bg-command-green/10 text-command-green" : "bg-white/10 text-slate-400"}`}>
+                        {product.sellable ? "Vendible" : "No vendible"}
+                      </span>
+                      {product.controlsStock ? <span className="rounded bg-white/10 px-2 py-1 text-slate-300">Inventario</span> : null}
+                      {product.usableAsInput ? <span className="rounded bg-white/10 px-2 py-1 text-slate-300">Insumo</span> : null}
+                      {product.requiresProduction ? <span className="rounded bg-white/10 px-2 py-1 text-slate-300">Produccion</span> : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded border border-dashed border-white/15 p-4 text-sm text-slate-400">
+                Aun no hay productos registrados.
               </p>
             )}
           </div>
