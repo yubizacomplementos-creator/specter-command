@@ -82,6 +82,6 @@ Configura cron:
 bash scripts/install-backup-cron.sh
 ```
 
-El script crea un dump diario a las 03:00 UTC en `/var/backups/specter-command`, genera checksum y conserva 14 dias por defecto.
+El script crea un dump temporal, genera checksum, lo sube a Cloudflare R2 y borra el archivo temporal al terminar.
 
-Cuando Cloudflare R2 este configurado con `rclone` bajo el remoto `specter-r2`, el mismo script subira automaticamente los `.dump` y `.sha256` al bucket definido en `R2_BUCKET`.
+Si Cloudflare R2 no esta configurado con `rclone` bajo el remoto `specter-r2`, el backup falla y no conserva copias locales.
