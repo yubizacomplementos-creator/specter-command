@@ -79,7 +79,9 @@ Crear un repositorio llamado `specter-command`, subir este proyecto y dejar CI a
 Configura cron:
 
 ```bash
-0 3 * * * cd /var/www/specter-command && /usr/bin/env bash scripts/backup-postgres.sh
+bash scripts/install-backup-cron.sh
 ```
 
-Despues se debe subir el dump a Cloudflare R2 con `rclone` o AWS CLI compatible S3.
+El script crea un dump diario a las 03:00 UTC en `/var/backups/specter-command`, genera checksum y conserva 14 dias por defecto.
+
+Cuando Cloudflare R2 este configurado con `rclone` bajo el remoto `specter-r2`, el mismo script subira automaticamente los `.dump` y `.sha256` al bucket definido en `R2_BUCKET`.
