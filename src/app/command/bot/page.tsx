@@ -16,7 +16,7 @@ const botMessages = {
   forbidden: { tone: "error", text: "Tu rol no permite operar el bot." },
   invalid_customer: { tone: "error", text: "El cliente seleccionado no existe." },
   invalid_conversation: { tone: "error", text: "La conversacion seleccionada no existe." },
-  settings_invalid: { tone: "error", text: "Revisa la configuracion del bot. El nombre es obligatorio." },
+  settings_invalid: { tone: "error", text: "No se pudo guardar la configuracion. Revisa que los textos no esten incompletos o demasiado largos." },
   settings_saved: { tone: "success", text: "Configuracion del bot guardada." },
   whatsapp_connecting: { tone: "success", text: "Conexion solicitada. Espera unos segundos y actualiza para ver el QR." },
   whatsapp_disconnected: { tone: "success", text: "WhatsApp quedo desconectado para este negocio." }
@@ -42,6 +42,12 @@ function businessHoursText(value: unknown) {
 
   return "";
 }
+
+const fieldClass =
+  "rounded-md border border-slate-300 bg-white px-3 py-2 font-normal text-slate-950 shadow-sm outline-none placeholder:text-slate-400 focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100 disabled:bg-slate-100 disabled:text-slate-500";
+
+const textAreaClass =
+  "rounded-md border border-slate-300 bg-white px-3 py-2 font-normal text-slate-950 shadow-sm outline-none placeholder:text-slate-400 focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100 disabled:bg-slate-100 disabled:text-slate-500";
 
 export default async function BotPage({ searchParams }: BotPageProps) {
   const session = await requireSession();
@@ -169,15 +175,15 @@ export default async function BotPage({ searchParams }: BotPageProps) {
           <form action="/api/bot/settings" method="post" className="mt-5 grid gap-4 md:grid-cols-2">
             <label className="grid gap-1 text-sm font-medium text-slate-700">
               Nombre del bot
-              <input name="botName" defaultValue={botSetting?.botName ?? "Specter Bot"} disabled={!canManageBot} className="rounded-md border border-slate-200 px-3 py-2 font-normal outline-none focus:border-cyan-600 disabled:bg-slate-50" />
+              <input name="botName" defaultValue={botSetting?.botName ?? "Specter Bot"} disabled={!canManageBot} className={fieldClass} />
             </label>
             <label className="grid gap-1 text-sm font-medium text-slate-700">
               Nombre del negocio
-              <input name="businessName" defaultValue={botSetting?.businessName ?? session.company.name} disabled={!canManageBot} className="rounded-md border border-slate-200 px-3 py-2 font-normal outline-none focus:border-cyan-600 disabled:bg-slate-50" />
+              <input name="businessName" defaultValue={botSetting?.businessName ?? session.company.name} disabled={!canManageBot} className={fieldClass} />
             </label>
             <label className="grid gap-1 text-sm font-medium text-slate-700">
               Tono
-              <select name="tone" defaultValue={botSetting?.tone ?? "amable"} disabled={!canManageBot} className="rounded-md border border-slate-200 px-3 py-2 font-normal outline-none focus:border-cyan-600 disabled:bg-slate-50">
+              <select name="tone" defaultValue={botSetting?.tone ?? "amable"} disabled={!canManageBot} className={fieldClass}>
                 <option value="amable">Amable</option>
                 <option value="profesional">Profesional</option>
                 <option value="cercano">Cercano</option>
@@ -187,32 +193,42 @@ export default async function BotPage({ searchParams }: BotPageProps) {
             </label>
             <label className="grid gap-1 text-sm font-medium text-slate-700">
               Horario de atencion
-              <input name="businessHours" defaultValue={businessHoursText(botSetting?.businessHours)} placeholder="Lunes a sabado 8am a 6pm" disabled={!canManageBot} className="rounded-md border border-slate-200 px-3 py-2 font-normal outline-none focus:border-cyan-600 disabled:bg-slate-50" />
+              <input name="businessHours" defaultValue={businessHoursText(botSetting?.businessHours)} placeholder="Lunes a sabado 8am a 6pm" disabled={!canManageBot} className={fieldClass} />
             </label>
             <label className="grid gap-1 text-sm font-medium text-slate-700 md:col-span-2">
               Mensaje de bienvenida
-              <textarea name="welcomeMessage" defaultValue={botSetting?.welcomeMessage ?? ""} rows={2} disabled={!canManageBot} className="rounded-md border border-slate-200 px-3 py-2 font-normal outline-none focus:border-cyan-600 disabled:bg-slate-50" />
+              <textarea name="welcomeMessage" defaultValue={botSetting?.welcomeMessage ?? ""} rows={2} disabled={!canManageBot} className={textAreaClass} />
             </label>
             <label className="grid gap-1 text-sm font-medium text-slate-700">
               Mensaje si no sabe responder
-              <textarea name="fallbackMessage" defaultValue={botSetting?.fallbackMessage ?? ""} rows={3} disabled={!canManageBot} className="rounded-md border border-slate-200 px-3 py-2 font-normal outline-none focus:border-cyan-600 disabled:bg-slate-50" />
+              <textarea name="fallbackMessage" defaultValue={botSetting?.fallbackMessage ?? ""} rows={3} disabled={!canManageBot} className={textAreaClass} />
             </label>
             <label className="grid gap-1 text-sm font-medium text-slate-700">
               Traspaso a humano
-              <textarea name="humanHandoffText" defaultValue={botSetting?.humanHandoffText ?? ""} rows={3} disabled={!canManageBot} className="rounded-md border border-slate-200 px-3 py-2 font-normal outline-none focus:border-cyan-600 disabled:bg-slate-50" />
+              <textarea name="humanHandoffText" defaultValue={botSetting?.humanHandoffText ?? ""} rows={3} disabled={!canManageBot} className={textAreaClass} />
             </label>
             <label className="grid gap-1 text-sm font-medium text-slate-700 md:col-span-2">
               Instrucciones internas para la IA
-              <textarea name="instructions" defaultValue={botSetting?.instructions ?? ""} rows={4} placeholder="Ej: no prometer descuentos sin confirmacion, pedir ciudad antes de cotizar envio..." disabled={!canManageBot} className="rounded-md border border-slate-200 px-3 py-2 font-normal outline-none focus:border-cyan-600 disabled:bg-slate-50" />
+              <textarea name="instructions" defaultValue={botSetting?.instructions ?? ""} rows={5} placeholder="Ej: no prometer descuentos sin confirmacion, pedir ciudad antes de cotizar envio..." disabled={!canManageBot} className={textAreaClass} />
             </label>
-            <div className="flex flex-wrap gap-4 text-sm text-slate-700 md:col-span-2">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" name="autoReplyEnabled" defaultChecked={botSetting?.autoReplyEnabled ?? false} disabled={!canManageBot} />
-                Responder automaticamente
+            <div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 md:col-span-2">
+              <label className="flex items-start gap-3">
+                <input type="checkbox" name="autoReplyEnabled" defaultChecked={botSetting?.autoReplyEnabled ?? false} disabled={!canManageBot} className="mt-1" />
+                <span>
+                  <span className="block font-semibold text-slate-900">Responder automaticamente</span>
+                  <span className="mt-1 block text-slate-600">
+                    Cuando este activo, el bot podra contestar mensajes de WhatsApp con IA usando estas instrucciones. Si esta apagado, solo registra las conversaciones para que una persona responda.
+                  </span>
+                </span>
               </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" name="collectLeadData" defaultChecked={botSetting?.collectLeadData ?? true} disabled={!canManageBot} />
-                Pedir datos de contacto cuando falten
+              <label className="flex items-start gap-3">
+                <input type="checkbox" name="collectLeadData" defaultChecked={botSetting?.collectLeadData ?? true} disabled={!canManageBot} className="mt-1" />
+                <span>
+                  <span className="block font-semibold text-slate-900">Pedir datos de contacto cuando falten</span>
+                  <span className="mt-1 block text-slate-600">
+                    Permite que el bot solicite nombre, telefono, ciudad u otros datos necesarios antes de cerrar una venta o crear seguimiento.
+                  </span>
+                </span>
               </label>
             </div>
             {canManageBot ? (

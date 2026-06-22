@@ -19,11 +19,11 @@ const botSettingsSchema = z.object({
     (value) => (typeof value === "string" && value.trim() ? value.trim() : "amable"),
     z.string().max(40)
   ),
-  welcomeMessage: optionalText(500),
-  fallbackMessage: optionalText(500),
-  humanHandoffText: optionalText(500),
-  instructions: optionalText(3000),
-  businessHours: optionalText(500),
+  welcomeMessage: optionalText(1500),
+  fallbackMessage: optionalText(1500),
+  humanHandoffText: optionalText(1500),
+  instructions: optionalText(12000),
+  businessHours: optionalText(1000),
   autoReplyEnabled: z.preprocess((value) => value === "on", z.boolean()),
   collectLeadData: z.preprocess((value) => value === "on", z.boolean())
 });
