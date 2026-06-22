@@ -205,6 +205,36 @@ function fallbackReply(text: string, fallbackMessage?: string | null) {
   return "Gracias por escribirnos. Déjame validar la información para ayudarte bien.";
 }
 
+function titleCaseName(value: string) {
+  return value
+    .trim()
+    .split(/\s+/)
+    .slice(0, 4)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function extractCustomerName(text: string) {
+  const cleaned = text
+    .replace(/[.,;:!?¡¿()[\]{}"]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const match = cleaned.match(/\b(?:me llamo|mi nombre es|soy)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+(?:\s+[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+){0,3})/i);
+  const rawName = match?.[1]?.trim();
+
+  if (!rawName) {
+    return null;
+  }
+
+  const lower = rawName.toLowerCase();
+  const blocked = ["de", "del", "una", "un", "el", "la", "cliente", "asesor", "asesora", "bot"];
+  if (blocked.includes(lower.split(/\s+/)[0])) {
+    return null;
+  }
+
+  return titleCaseName(rawName);
+}
+
 async function generateAutoReply(input: {
   companyId: string;
   companyName: string;
@@ -274,8 +304,11 @@ async function generateAutoReply(input: {
       minutesSincePrevious === null ||
       minutesSincePrevious >= 120 ||
       (isGreeting && (minutesSinceIntroduction === null || minutesSinceIntroduction >= 120));
+    const introductionExample = previousMessage
+      ? `Un gusto saludarte de nuevo, soy ${botName} de ${businessName}. Con gusto te ayudo.`
+      : `Hola, soy ${botName} de ${businessName}. Con gusto te ayudo.`;
     const introductionRule = shouldIntroduce
-      ? `Regla obligatoria de saludo: esta conversacion es nueva, se retoma despues de ${minutesSincePrevious ?? "muchos"} minutos, o no se ha presentado la marca en las ultimas 2 horas. En la primera frase debes saludar y presentarte con el nombre del bot y la marca/negocio. Ejemplo: "Buenos dias, soy ${botName} de ${businessName}. Con gusto te ayudo."`
+      ? `Regla obligatoria de saludo: esta conversacion es nueva, se retoma despues de ${minutesSincePrevious ?? "muchos"} minutos, o no se ha presentado la marca en las ultimas 2 horas. En la primera frase debes saludar y presentarte con el nombre del bot y la marca/negocio. Si ya hubo conversacion antes, usa una frase como: "${introductionExample}"`
       : "La conversacion esta activa recientemente. Puedes responder directo, sin repetir presentacion completa salvo que el cliente la pida.";
     const instructions = [
         setting?.instructions?.trim() || `Eres el asistente comercial de ${input.companyName}.`,
@@ -285,6 +318,9 @@ async function generateAutoReply(input: {
         "Si no hay productos cargados en el contexto, indica claramente que aun no tienes catalogo o inventario disponible en Specter Command y pide que un asesor lo confirme.",
         "Si falta informacion en Specter Command, dilo y pide solo el dato necesario.",
         `Nombre del bot: ${botName}. Marca/negocio: ${businessName}.`,
+        context.customer?.name
+          ? `Nombre recordado del cliente: ${context.customer.name}. Puedes usarlo de forma natural, especialmente en saludos, pero no lo repitas en cada frase.`
+          : "Si el cliente dice su nombre, recuerdalo y usalo con naturalidad en futuras conversaciones.",
         "No uses tratamientos demasiado personales como linda, hermosa, preciosa, reina, amor o similares.",
         introductionRule
       ].join("\n\n");
@@ -360,7 +396,7 @@ async function generateAutoReply(input: {
 
 async function rememberInboundMessage(companyId: string, remoteJid: string, text: string) {
   const phone = cleanJid(remoteJid);
-  const customer = phone
+  let customer = phone
     ? await prisma.customer.findFirst({
         where: {
           companyId,
@@ -371,6 +407,37 @@ async function rememberInboundMessage(companyId: string, remoteJid: string, text
         select: { id: true, name: true }
       })
     : null;
+  const extractedName = extractCustomerName(text);
+
+  if (extractedName && phone) {
+    if (customer) {
+      customer = await prisma.customer.update({
+        where: { id: customer.id },
+        data: {
+          name: extractedName,
+          attributes: {
+            source: "whatsapp-baileys",
+            rememberedName: extractedName
+          }
+        },
+        select: { id: true, name: true }
+      });
+    } else {
+      customer = await prisma.customer.create({
+        data: {
+          companyId,
+          name: extractedName,
+          phone,
+          tags: ["whatsapp"],
+          attributes: {
+            source: "whatsapp-baileys",
+            rememberedName: extractedName
+          }
+        },
+        select: { id: true, name: true }
+      });
+    }
+  }
 
   const conversation =
     (await prisma.botConversation.findFirst({
