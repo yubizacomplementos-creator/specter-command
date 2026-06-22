@@ -2,6 +2,7 @@ import { CommandShell } from "../_components/command-shell";
 import { requireSession } from "@/server/session";
 import { prisma } from "@/server/db";
 import QRCode from "qrcode";
+import { WhatsAppQrRefresh } from "./whatsapp-qr-refresh";
 
 type BotPageProps = {
   searchParams?: Promise<{
@@ -89,6 +90,7 @@ export default async function BotPage({ searchParams }: BotPageProps) {
 
   return (
     <CommandShell companyName={session.company.name} userEmail={session.user.email} role={session.role}>
+      <WhatsAppQrRefresh status={whatsappSession?.status} />
       <div className="mx-auto grid max-w-6xl gap-6">
         <section className="rounded-lg border border-slate-200 bg-white p-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -144,7 +146,7 @@ export default async function BotPage({ searchParams }: BotPageProps) {
             {qrDataUrl ? (
               <div className="text-center">
                 <img src={qrDataUrl} alt="QR para conectar WhatsApp" className="mx-auto h-64 w-64 rounded-md bg-white p-2" />
-                <p className="mt-3 text-xs text-slate-500">El QR cambia si vence. Si no escanea, vuelve a conectar.</p>
+                <p className="mt-3 text-xs text-slate-500">Escanealo de inmediato. Esta pantalla actualiza el QR automaticamente si vence.</p>
               </div>
             ) : (
               <p className="text-center text-sm text-slate-500">
