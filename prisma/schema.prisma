@@ -77,6 +77,8 @@ model Company {
   automationRules AutomationRule[]
   integrations     IntegrationSetting[]
   botConversations BotConversation[]
+  botSettings      BotSetting?
+  botChannelSessions BotChannelSession[]
   auditLogs       AuditLog[]
   backupJobs      BackupJob[]
 
@@ -435,6 +437,51 @@ model BotConversation {
 
   @@index([companyId, status, active, deletedAt])
   @@index([companyId, customerId])
+}
+
+model BotSetting {
+  id                String    @id @default(cuid())
+  companyId         String    @unique
+  botName           String    @default("Specter Bot")
+  businessName      String?
+  tone              String    @default("amable")
+  welcomeMessage    String?
+  fallbackMessage   String?
+  businessHours     Json      @default("{}")
+  humanHandoffText  String?
+  autoReplyEnabled  Boolean   @default(false)
+  collectLeadData   Boolean   @default(true)
+  instructions      String?
+  metadata          Json      @default("{}")
+  updatedById       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  company           Company   @relation(fields: [companyId], references: [id])
+}
+
+model BotChannelSession {
+  id             String    @id @default(cuid())
+  companyId      String
+  provider       String    @default("baileys")
+  channel        String    @default("whatsapp")
+  status         String    @default("DISCONNECTED")
+  phoneNumber    String?
+  displayName    String?
+  qrCode         String?
+  sessionPath    String?
+  lastError      String?
+  lastSeenAt     DateTime?
+  active         Boolean   @default(true)
+  updatedById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  company        Company   @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, provider, channel])
+  @@index([companyId, active, status])
+  @@index([provider, channel, status])
 }
 
 model BotMessage {
