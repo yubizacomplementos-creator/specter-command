@@ -7,11 +7,24 @@ import { decryptSecrets } from "@/server/integrations";
 import { getCurrentSession } from "@/server/session";
 import { publicUrl, redirectBackUrl } from "@/server/url";
 
+const optionalFormString = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() ? value : undefined),
+  z.string().optional()
+);
+
+const requiredFormString = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim() : ""),
+  z.string().min(1).max(4000)
+);
+
 const messageSchema = z.object({
-  conversationId: z.string().optional(),
-  customerId: z.string().optional(),
-  channel: z.string().max(40).optional(),
-  message: z.string().min(1).max(4000)
+  conversationId: optionalFormString,
+  customerId: optionalFormString,
+  channel: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() ? value.trim() : undefined),
+    z.string().max(40).optional()
+  ),
+  message: requiredFormString
 });
 
 function clientIp(request: NextRequest) {
