@@ -13,10 +13,7 @@ const optionalText = (max = 2000) =>
   );
 
 const botSettingsSchema = z.object({
-  botName: z.preprocess(
-    (value) => (typeof value === "string" ? value.trim() : ""),
-    z.string().min(2).max(80)
-  ),
+  botName: optionalText(80),
   businessName: optionalText(120),
   tone: z.preprocess(
     (value) => (typeof value === "string" && value.trim() ? value.trim() : "amable"),
@@ -78,8 +75,8 @@ export async function POST(request: NextRequest) {
     where: { companyId: session.company.id },
     create: {
       companyId: session.company.id,
-      botName: parsed.data.botName,
-      businessName: parsed.data.businessName,
+      botName: parsed.data.botName ?? "Specter Bot",
+      businessName: parsed.data.businessName ?? session.company.name,
       tone: parsed.data.tone,
       welcomeMessage: parsed.data.welcomeMessage,
       fallbackMessage: parsed.data.fallbackMessage,
@@ -91,8 +88,8 @@ export async function POST(request: NextRequest) {
       updatedById: session.user.id
     },
     update: {
-      botName: parsed.data.botName,
-      businessName: parsed.data.businessName,
+      botName: parsed.data.botName ?? "Specter Bot",
+      businessName: parsed.data.businessName ?? session.company.name,
       tone: parsed.data.tone,
       welcomeMessage: parsed.data.welcomeMessage,
       fallbackMessage: parsed.data.fallbackMessage,
