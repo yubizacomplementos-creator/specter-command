@@ -219,7 +219,8 @@ function extractCustomerName(text: string) {
     .replace(/[.,;:!?¡¿()[\]{}"]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const match = cleaned.match(/\b(?:me llamo|mi nombre es|soy)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+(?:\s+[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+){0,3})/i);
+  const nameSegment = cleaned.split(/\s+(?:y|pero|porque|para|quiero|necesito|busco|deseo|quisiera)\s+/i)[0];
+  const match = nameSegment.match(/\b(?:me llamo|mi nombre es|soy)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+(?:\s+[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]+){0,2})/i);
   const rawName = match?.[1]?.trim();
 
   if (!rawName) {
@@ -270,6 +271,31 @@ function ensureHumanGreeting(input: {
 
   const remainder = withoutRepeatedGreeting.trim();
   return remainder ? `${opener} ${remainder}` : opener;
+}
+
+function improveVagueReply(input: { reply: string; message: string; hasProducts: boolean; businessName: string }) {
+  const normalizedReply = input.reply.toLowerCase();
+  const normalizedMessage = input.message.toLowerCase();
+  const vague =
+    normalizedReply.includes("dame un momento") ||
+    normalizedReply.includes("validamos esa informacion") ||
+    normalizedReply.includes("validamos esa información");
+
+  if (!vague) {
+    return input.reply;
+  }
+
+  if (normalizedMessage.includes("a que se dedican") || normalizedMessage.includes("a qué se dedican")) {
+    return `${input.businessName} es un negocio de complementos y accesorios. Con gusto puedo ayudarte a revisar productos, horarios o disponibilidad.`;
+  }
+
+  if (normalizedMessage.includes("camiseta") || normalizedMessage.includes("camisetas")) {
+    return input.hasProducts
+      ? "Con gusto lo revisamos. Dime qué referencia o diseño de camiseta estás buscando y valido la disponibilidad."
+      : "Con gusto te ayudaría con camisetas, pero en este momento no tengo ese catálogo cargado en Specter Command, así que no quiero inventarte disponibilidad. Si quieres, puedo dejarlo listo para que un asesor lo confirme.";
+  }
+
+  return `Con gusto te ayudo. Cuéntame un poco más de lo que necesitas y lo revisamos con ${input.businessName}.`;
 }
 
 async function generateAutoReply(input: {
@@ -417,7 +443,12 @@ async function generateAutoReply(input: {
       };
     }
 
-    const generatedText = responseText(payload) ?? fallbackReply(input.message, setting?.fallbackMessage);
+    const generatedText = improveVagueReply({
+      reply: responseText(payload) ?? fallbackReply(input.message, setting?.fallbackMessage),
+      message: input.message,
+      hasProducts: context.products.length > 0,
+      businessName
+    });
 
     return {
       text: ensureHumanGreeting({
