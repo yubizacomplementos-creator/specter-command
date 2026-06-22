@@ -243,6 +243,7 @@ function includesAny(value: string, terms: Array<string | null | undefined>) {
 function ensureHumanGreeting(input: {
   text: string;
   shouldIntroduce: boolean;
+  isGreeting: boolean;
   previousMessageExists: boolean;
   botName: string;
   businessName: string;
@@ -250,7 +251,7 @@ function ensureHumanGreeting(input: {
 }) {
   const trimmed = input.text.trim();
 
-  if (!input.shouldIntroduce) {
+  if (!input.shouldIntroduce || !input.isGreeting) {
     return trimmed;
   }
 
@@ -267,7 +268,8 @@ function ensureHumanGreeting(input: {
     ? `Un gusto saludarte de nuevo${customerPart}. Soy ${input.botName} de ${input.businessName}.`
     : `Hola${customerPart}. Soy ${input.botName} de ${input.businessName}.`;
 
-  return `${opener} ${withoutRepeatedGreeting || trimmed}`;
+  const remainder = withoutRepeatedGreeting.trim();
+  return remainder ? `${opener} ${remainder}` : opener;
 }
 
 async function generateAutoReply(input: {
@@ -345,6 +347,15 @@ async function generateAutoReply(input: {
     const introductionRule = shouldIntroduce
       ? `Regla obligatoria de saludo: esta conversacion es nueva, se retoma despues de ${minutesSincePrevious ?? "muchos"} minutos, o no se ha presentado la marca en las ultimas 2 horas. En la primera frase debes saludar y presentarte con el nombre del bot y la marca/negocio. Si ya hubo conversacion antes, usa una frase como: "${introductionExample}"`
       : "La conversacion esta activa recientemente. Puedes responder directo, sin repetir presentacion completa salvo que el cliente la pida.";
+    const coherenceRule = [
+      "Regla de coherencia humana:",
+      "- Si el cliente solo saluda, saluda de vuelta de forma natural y breve.",
+      "- Si el cliente saluda y pregunta algo, responde ambas cosas en una sola respuesta fluida.",
+      "- Si el cliente ya hizo una pregunta concreta, no vuelvas a preguntar genericamente que necesita.",
+      "- No repitas el nombre del cliente ni la marca en cada mensaje.",
+      "- No encadenes dos saludos en la misma respuesta.",
+      "- Mantén el hilo de la conversacion y responde al ultimo mensaje del cliente."
+    ].join("\n");
     const instructions = [
         setting?.instructions?.trim() || `Eres el asistente comercial de ${input.companyName}.`,
         "Responde por WhatsApp en español claro, breve y natural.",
@@ -357,7 +368,8 @@ async function generateAutoReply(input: {
           ? `Nombre recordado del cliente: ${context.customer.name}. Puedes usarlo de forma natural, especialmente en saludos, pero no lo repitas en cada frase.`
           : "Si el cliente dice su nombre, recuerdalo y usalo con naturalidad en futuras conversaciones.",
         "No uses tratamientos demasiado personales como linda, hermosa, preciosa, reina, amor o similares.",
-        introductionRule
+        introductionRule,
+        coherenceRule
       ].join("\n\n");
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -411,6 +423,7 @@ async function generateAutoReply(input: {
       text: ensureHumanGreeting({
         text: generatedText,
         shouldIntroduce,
+        isGreeting,
         previousMessageExists: Boolean(previousMessage),
         botName,
         businessName,
