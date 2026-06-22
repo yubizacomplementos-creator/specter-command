@@ -254,11 +254,28 @@ async function generateAutoReply(input: {
     const minutesSincePrevious = previousMessage
       ? Math.floor((input.currentMessageCreatedAt.getTime() - previousMessage.createdAt.getTime()) / 60000)
       : null;
-    const shouldIntroduce = minutesSincePrevious === null || minutesSincePrevious >= 120;
     const businessName = setting?.businessName?.trim() || context.company?.name || input.companyName;
     const botName = setting?.botName?.trim() || "el asistente";
+    const normalizedMessage = input.message.toLowerCase();
+    const isGreeting =
+      normalizedMessage.includes("hola") ||
+      normalizedMessage.includes("buenos dias") ||
+      normalizedMessage.includes("buenos días") ||
+      normalizedMessage.includes("buenas tardes") ||
+      normalizedMessage.includes("buenas noches");
+    const lastIntroduction = history.find((item) => {
+      const content = item.content.toLowerCase();
+      return item.role === "assistant" && (content.includes(botName.toLowerCase()) || content.includes(businessName.toLowerCase()));
+    });
+    const minutesSinceIntroduction = lastIntroduction
+      ? Math.floor((input.currentMessageCreatedAt.getTime() - lastIntroduction.createdAt.getTime()) / 60000)
+      : null;
+    const shouldIntroduce =
+      minutesSincePrevious === null ||
+      minutesSincePrevious >= 120 ||
+      (isGreeting && (minutesSinceIntroduction === null || minutesSinceIntroduction >= 120));
     const introductionRule = shouldIntroduce
-      ? `Regla obligatoria de saludo: esta conversacion es nueva o se retoma despues de ${minutesSincePrevious ?? "muchos"} minutos. En la primera frase debes saludar y presentarte con el nombre del bot y la marca/negocio. Ejemplo: "Buenos dias, soy ${botName} de ${businessName}. Con gusto te ayudo."`
+      ? `Regla obligatoria de saludo: esta conversacion es nueva, se retoma despues de ${minutesSincePrevious ?? "muchos"} minutos, o no se ha presentado la marca en las ultimas 2 horas. En la primera frase debes saludar y presentarte con el nombre del bot y la marca/negocio. Ejemplo: "Buenos dias, soy ${botName} de ${businessName}. Con gusto te ayudo."`
       : "La conversacion esta activa recientemente. Puedes responder directo, sin repetir presentacion completa salvo que el cliente la pida.";
     const instructions = [
         setting?.instructions?.trim() || `Eres el asistente comercial de ${input.companyName}.`,
