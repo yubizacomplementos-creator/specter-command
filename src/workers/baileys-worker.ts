@@ -259,12 +259,15 @@ function ensureHumanGreeting(input: {
     return trimmed;
   }
 
+  const withoutRepeatedGreeting = trimmed
+    .replace(/^(hola|buenos dias|buenos días|buenas tardes|buenas noches)[,!.¡\s]+/i, "")
+    .replace(/^gracias por escribirnos[,!.¡\s]+/i, "");
   const customerPart = input.customerName ? `, ${input.customerName}` : "";
   const opener = input.previousMessageExists
     ? `Un gusto saludarte de nuevo${customerPart}. Soy ${input.botName} de ${input.businessName}.`
     : `Hola${customerPart}. Soy ${input.botName} de ${input.businessName}.`;
 
-  return `${opener} ${trimmed}`;
+  return `${opener} ${withoutRepeatedGreeting || trimmed}`;
 }
 
 async function generateAutoReply(input: {
