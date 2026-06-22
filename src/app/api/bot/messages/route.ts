@@ -111,7 +111,7 @@ async function openAiConfig(companyId: string) {
   const apiKey = process.env.OPENAI_API_KEY || secrets.apiKey;
   const model =
     process.env.OPENAI_MODEL ||
-    (typeof publicConfig.model === "string" && publicConfig.model.trim() ? publicConfig.model.trim() : "gpt-5.5");
+    (typeof publicConfig.model === "string" && publicConfig.model.trim() ? publicConfig.model.trim() : "gpt-5-mini");
 
   return { apiKey, model };
 }
