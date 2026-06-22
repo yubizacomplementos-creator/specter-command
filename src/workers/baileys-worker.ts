@@ -1,13 +1,16 @@
 import makeWASocket, {
   DisconnectReason,
+  downloadMediaMessage,
   fetchLatestBaileysVersion,
   type WAMessage,
   useMultiFileAuthState,
   type WASocket
 } from "@whiskeysockets/baileys";
 import { PrismaClient } from "@prisma/client";
+import { execFile } from "node:child_process";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import P from "pino";
 
@@ -48,6 +51,9 @@ const logger = P({ level: process.env.BAILEYS_LOG_LEVEL ?? "silent" });
 const authRoot = process.env.BAILEYS_AUTH_DIR ?? path.join(process.cwd(), ".data", "baileys");
 const managedSockets = new Map<string, WASocket>();
 let stopping = false;
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
+const MAX_AUDIO_SECONDS = 120;
 
 type DisconnectError = Error & {
   output?: {
@@ -77,6 +83,237 @@ function extractText(item: WAMessage) {
     message.videoMessage?.caption ??
     null
   );
+}
+
+function extractUrls(text: string) {
+  return text.match(/https?:\/\/[^\s]+/gi) ?? [];
+}
+
+function messageMediaInfo(item: WAMessage) {
+  const message = item.message;
+
+  if (message?.imageMessage) {
+    return {
+      kind: "image" as const,
+      mimetype: message.imageMessage.mimetype ?? "image/jpeg",
+      caption: message.imageMessage.caption ?? null
+    };
+  }
+
+  if (message?.audioMessage) {
+    return {
+      kind: "audio" as const,
+      mimetype: message.audioMessage.mimetype ?? "audio/ogg",
+      seconds: Number(message.audioMessage.seconds ?? 0),
+      ptt: Boolean(message.audioMessage.ptt)
+    };
+  }
+
+  if (message?.videoMessage) {
+    return {
+      kind: "video" as const,
+      mimetype: message.videoMessage.mimetype ?? "video/mp4",
+      caption: message.videoMessage.caption ?? null
+    };
+  }
+
+  if (message?.documentMessage) {
+    return {
+      kind: "document" as const,
+      mimetype: message.documentMessage.mimetype ?? "application/octet-stream",
+      fileName: message.documentMessage.fileName ?? null,
+      caption: message.documentMessage.caption ?? null
+    };
+  }
+
+  return null;
+}
+
+async function ffmpegExists() {
+  return new Promise<boolean>((resolve) => {
+    execFile("ffmpeg", ["-version"], { timeout: 3000 }, (error) => {
+      resolve(!error);
+    });
+  });
+}
+
+async function convertAudioToMp3(buffer: Buffer, mimeType: string) {
+  if (!(await ffmpegExists())) {
+    return null;
+  }
+
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "specter-voice-"));
+  const inputExt = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "mp4" : "ogg";
+  const inputPath = path.join(tempDir, `input.${inputExt}`);
+  const outputPath = path.join(tempDir, "voice.mp3");
+
+  try {
+    await fs.writeFile(inputPath, buffer);
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        "ffmpeg",
+        ["-y", "-i", inputPath, "-vn", "-acodec", "libmp3lame", "-ar", "16000", "-ac", "1", outputPath],
+        { timeout: 20000 },
+        (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        }
+      );
+    });
+
+    return await fs.readFile(outputPath);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function transcribeAudio(buffer: Buffer, mimeType: string) {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    return {
+      text: null,
+      metadata: { transcribed: false, reason: "missing_openai_key" }
+    };
+  }
+
+  const supportedDirectly =
+    mimeType.includes("mp3") ||
+    mimeType.includes("mp4") ||
+    mimeType.includes("mpeg") ||
+    mimeType.includes("m4a") ||
+    mimeType.includes("wav") ||
+    mimeType.includes("webm");
+  const converted = supportedDirectly ? buffer : await convertAudioToMp3(buffer, mimeType);
+  const fileBuffer = converted ?? buffer;
+  const fileName = converted ? "voice.mp3" : mimeType.includes("webm") ? "voice.webm" : "voice.mp3";
+  const fileType = converted ? "audio/mpeg" : mimeType.includes("webm") ? "audio/webm" : mimeType;
+
+  if (!supportedDirectly && !converted) {
+    return {
+      text: null,
+      metadata: { transcribed: false, reason: "ffmpeg_unavailable", mimeType }
+    };
+  }
+
+  const form = new FormData();
+  form.set("model", process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe");
+  form.set("file", new Blob([new Uint8Array(fileBuffer)], { type: fileType }), fileName);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: form
+    });
+    const payload = (await response.json()) as { text?: string; error?: { message?: string } };
+
+    if (!response.ok || !payload.text?.trim()) {
+      return {
+        text: null,
+        metadata: {
+          transcribed: false,
+          reason: "openai_transcription_error",
+          status: response.status,
+          message: payload.error?.message
+        }
+      };
+    }
+
+    return {
+      text: payload.text.trim(),
+      metadata: {
+        transcribed: true,
+        model: process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe",
+        converted: Boolean(converted)
+      }
+    };
+  } catch (error) {
+    return {
+      text: null,
+      metadata: {
+        transcribed: false,
+        reason: error instanceof Error ? error.name : "unknown"
+      }
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function prepareInboundMessage(item: WAMessage, sock: WASocket) {
+  const text = extractText(item)?.trim() ?? "";
+  const media = messageMediaInfo(item);
+  const metadata: Record<string, unknown> = {
+    links: extractUrls(text)
+  };
+  let replyInput = text;
+  let imageDataUrl: string | null = null;
+
+  if (!media) {
+    return {
+      text: replyInput,
+      metadata,
+      imageDataUrl
+    };
+  }
+
+  metadata.media = { ...media };
+
+  if (media.kind === "video" || media.kind === "document") {
+    replyInput =
+      text ||
+      (media.kind === "video"
+        ? "El cliente envio un video. Indicale que por ahora puedes ayudar mejor si describe lo que necesita o envia una imagen."
+        : `El cliente envio un documento${media.fileName ? ` llamado ${media.fileName}` : ""}. Indicale que por ahora puedes ayudar mejor si escribe el dato clave.`);
+    return { text: replyInput, metadata, imageDataUrl };
+  }
+
+  const buffer = await downloadMediaMessage(item, "buffer", {}, { logger, reuploadRequest: sock.updateMediaMessage });
+  metadata.media = { ...media, bytes: buffer.length };
+
+  if (media.kind === "image") {
+    if (buffer.length > MAX_IMAGE_BYTES) {
+      return {
+        text: "El cliente envio una imagen muy pesada. Pidele amablemente que la reenvie en menor tamano o que escriba lo que necesita revisar.",
+        metadata: { ...metadata, mediaTooLarge: true },
+        imageDataUrl: null
+      };
+    }
+
+    imageDataUrl = `data:${media.mimetype};base64,${buffer.toString("base64")}`;
+    replyInput =
+      text ||
+      "El cliente envio una imagen o pantallazo. Analizala y responde con ayuda comercial practica; si no puedes identificar algo con certeza, pide una aclaracion breve.";
+    return { text: replyInput, metadata, imageDataUrl };
+  }
+
+  if (media.kind === "audio") {
+    if (buffer.length > MAX_AUDIO_BYTES || media.seconds > MAX_AUDIO_SECONDS) {
+      return {
+        text: "El cliente envio una nota de voz muy larga o pesada. Pidele amablemente que envie una version mas corta o escriba el dato principal.",
+        metadata: { ...metadata, mediaTooLarge: true },
+        imageDataUrl: null
+      };
+    }
+
+    const transcription = await transcribeAudio(buffer, media.mimetype);
+    metadata.audio = transcription.metadata;
+    replyInput = transcription.text
+      ? `[Nota de voz transcrita]: ${transcription.text}`
+      : "El cliente envio una nota de voz, pero no se pudo transcribir en este momento. Pidele amablemente que la envie de nuevo o que escriba el dato principal.";
+  }
+
+  return { text: replyInput, metadata, imageDataUrl };
 }
 
 function responseText(payload: unknown) {
@@ -306,6 +543,7 @@ async function generateAutoReply(input: {
   currentMessageCreatedAt: Date;
   currentMessageId: string;
   message: string;
+  imageDataUrl?: string | null;
 }) {
   const setting = await prisma.botSetting.findUnique({
     where: { companyId: input.companyId }
@@ -398,6 +636,12 @@ async function generateAutoReply(input: {
         introductionRule,
         coherenceRule
       ].join("\n\n");
+    const userContent = input.imageDataUrl
+      ? [
+          { type: "input_text", text: input.message },
+          { type: "input_image", image_url: input.imageDataUrl }
+        ]
+      : input.message;
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       signal: controller.signal,
@@ -425,7 +669,7 @@ async function generateAutoReply(input: {
             })),
           {
             role: "user",
-            content: input.message
+            content: userContent
           }
         ]
       })
@@ -483,7 +727,7 @@ async function generateAutoReply(input: {
   }
 }
 
-async function rememberInboundMessage(companyId: string, remoteJid: string, text: string) {
+async function rememberInboundMessage(companyId: string, remoteJid: string, text: string, metadata: Record<string, unknown> = {}) {
   const phone = cleanJid(remoteJid);
   let customer = phone
     ? await prisma.customer.findFirst({
@@ -557,7 +801,8 @@ async function rememberInboundMessage(companyId: string, remoteJid: string, text
       metadata: {
         remoteJid,
         phone,
-        source: "baileys"
+        source: "baileys",
+        ...metadata
       }
     }
   });
@@ -674,8 +919,8 @@ async function startSession(companyId: string) {
         continue;
       }
 
-      const text = extractText(item);
-      if (!text?.trim()) {
+      const prepared = await prepareInboundMessage(item, sock);
+      if (!prepared.text.trim()) {
         continue;
       }
 
@@ -683,7 +928,12 @@ async function startSession(companyId: string) {
         where: { companyId },
         select: { autoReplyEnabled: true }
       });
-      const { conversation, customer, userMessage } = await rememberInboundMessage(companyId, item.key.remoteJid, text.trim());
+      const { conversation, customer, userMessage } = await rememberInboundMessage(
+        companyId,
+        item.key.remoteJid,
+        prepared.text.trim(),
+        prepared.metadata
+      );
 
       if (!setting?.autoReplyEnabled) {
         continue;
@@ -700,7 +950,8 @@ async function startSession(companyId: string) {
         conversationId: conversation.id,
         currentMessageCreatedAt: userMessage.createdAt,
         currentMessageId: userMessage.id,
-        message: text.trim()
+        message: prepared.text.trim(),
+        imageDataUrl: prepared.imageDataUrl
       });
 
       await sock.sendPresenceUpdate("composing", item.key.remoteJid);
