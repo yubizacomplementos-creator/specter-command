@@ -235,6 +235,38 @@ function extractCustomerName(text: string) {
   return titleCaseName(rawName);
 }
 
+function includesAny(value: string, terms: Array<string | null | undefined>) {
+  const normalized = value.toLowerCase();
+  return terms.some((term) => term?.trim() && normalized.includes(term.trim().toLowerCase()));
+}
+
+function ensureHumanGreeting(input: {
+  text: string;
+  shouldIntroduce: boolean;
+  previousMessageExists: boolean;
+  botName: string;
+  businessName: string;
+  customerName?: string | null;
+}) {
+  const trimmed = input.text.trim();
+
+  if (!input.shouldIntroduce) {
+    return trimmed;
+  }
+
+  const hasBrand = includesAny(trimmed, [input.botName, input.businessName]);
+  if (hasBrand) {
+    return trimmed;
+  }
+
+  const customerPart = input.customerName ? `, ${input.customerName}` : "";
+  const opener = input.previousMessageExists
+    ? `Un gusto saludarte de nuevo${customerPart}. Soy ${input.botName} de ${input.businessName}.`
+    : `Hola${customerPart}. Soy ${input.botName} de ${input.businessName}.`;
+
+  return `${opener} ${trimmed}`;
+}
+
 async function generateAutoReply(input: {
   companyId: string;
   companyName: string;
@@ -370,8 +402,17 @@ async function generateAutoReply(input: {
       };
     }
 
+    const generatedText = responseText(payload) ?? fallbackReply(input.message, setting?.fallbackMessage);
+
     return {
-      text: responseText(payload) ?? fallbackReply(input.message, setting?.fallbackMessage),
+      text: ensureHumanGreeting({
+        text: generatedText,
+        shouldIntroduce,
+        previousMessageExists: Boolean(previousMessage),
+        botName,
+        businessName,
+        customerName: context.customer?.name
+      }),
       metadata: {
         mode: "openai-responses",
         model,
