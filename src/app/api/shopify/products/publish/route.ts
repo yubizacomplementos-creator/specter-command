@@ -112,6 +112,71 @@ function shopifyHandle(product: { id: string; sku: string | null; name: string }
   return slug(source) || `producto-${product.id.slice(-8).toLowerCase()}`;
 }
 
+type ProductVariant = {
+  sku?: string | null;
+  price?: number | string | null;
+  options?: Record<string, string>;
+};
+
+function descriptionFromAttributes(attributes: Record<string, unknown>) {
+  const value = attributes.description;
+  return typeof value === "string" ? value : "";
+}
+
+function tagsFromAttributes(attributes: Record<string, unknown>, fallback: string) {
+  const tags = Array.isArray(attributes.tags)
+    ? attributes.tags.filter((tag): tag is string => typeof tag === "string" && Boolean(tag.trim()))
+    : [];
+
+  return Array.from(new Set([fallback, ...tags])).slice(0, 50);
+}
+
+function statusFromAttributes(attributes: Record<string, unknown>, sellable: boolean) {
+  return attributes.status === "DRAFT" || !sellable ? "DRAFT" : "ACTIVE";
+}
+
+function variantsFromAttributes(attributes: Record<string, unknown>) {
+  const variants = attributes.variants;
+  return Array.isArray(variants)
+    ? variants.filter((variant): variant is ProductVariant => Boolean(variant) && typeof variant === "object" && !Array.isArray(variant))
+    : [];
+}
+
+function optionNamesFromVariants(variants: ProductVariant[]) {
+  const names = new Set<string>();
+  for (const variant of variants) {
+    for (const name of Object.keys(variant.options ?? {})) {
+      if (name.trim()) {
+        names.add(name.trim());
+      }
+    }
+  }
+
+  return Array.from(names).slice(0, 3);
+}
+
+function optionValues(variants: ProductVariant[], optionName: string) {
+  return Array.from(
+    new Set(
+      variants
+        .map((variant) => variant.options?.[optionName]?.trim())
+        .filter((value): value is string => Boolean(value))
+    )
+  ).map((name) => ({ name }));
+}
+
+function variantPrice(variant: ProductVariant, fallback: string) {
+  if (typeof variant.price === "number" && Number.isFinite(variant.price)) {
+    return variant.price > 0 ? variant.price.toFixed(2) : fallback;
+  }
+  if (typeof variant.price === "string" && variant.price.trim()) {
+    const parsed = Number(variant.price.replace(",", "."));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed.toFixed(2) : fallback;
+  }
+
+  return fallback;
+}
+
 export async function POST(request: NextRequest) {
   const session = await getCurrentSession();
 
@@ -176,30 +241,51 @@ export async function POST(request: NextRequest) {
   const attributes = asRecord(product.attributes);
   const handle = typeof attributes.shopifyHandle === "string" ? attributes.shopifyHandle : shopifyHandle(product);
   const sku = product.sku || `SPECTER-${product.id.slice(-8).toUpperCase()}`;
-  const variables = {
-    synchronous: true,
-    identifier: { handle },
-    input: {
-      title: product.name,
-      handle,
-      productType: product.categoryKey,
-      vendor: typeof attributes.vendor === "string" ? attributes.vendor : product.company.legalName || product.company.name,
-      status: product.sellable ? "ACTIVE" : "DRAFT",
-      tags: [product.categoryKey],
-      productOptions: [
+  const specterVariants = variantsFromAttributes(attributes);
+  const optionNames = optionNamesFromVariants(specterVariants);
+  const defaultPrice = priceFromAttributes(attributes);
+  const productOptions = optionNames.length
+    ? optionNames.map((name, index) => ({
+        name,
+        position: index + 1,
+        values: optionValues(specterVariants, name)
+      }))
+    : [
         {
           name: "Title",
           position: 1,
           values: [{ name: "Default Title" }]
         }
-      ],
-      variants: [
+      ];
+  const variants = specterVariants.length
+    ? specterVariants.map((variant, index) => ({
+        optionValues: optionNames.map((optionName) => ({
+          optionName,
+          name: variant.options?.[optionName] || "Default"
+        })),
+        sku: variant.sku || `${sku}-${index + 1}`,
+        price: variantPrice(variant, defaultPrice)
+      }))
+    : [
         {
           optionValues: [{ optionName: "Title", name: "Default Title" }],
           sku,
-          price: priceFromAttributes(attributes)
+          price: defaultPrice
         }
-      ],
+      ];
+  const variables = {
+    synchronous: true,
+    identifier: { handle },
+    input: {
+      title: product.name,
+      descriptionHtml: descriptionFromAttributes(attributes),
+      handle,
+      productType: product.categoryKey,
+      vendor: typeof attributes.vendor === "string" ? attributes.vendor : product.company.legalName || product.company.name,
+      status: statusFromAttributes(attributes, product.sellable),
+      tags: tagsFromAttributes(attributes, product.categoryKey),
+      productOptions,
+      variants,
       metafields: [
         {
           namespace: "specter",

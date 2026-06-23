@@ -9,9 +9,15 @@ import { publicUrl, redirectBackUrl } from "@/server/url";
 const productSchema = z.object({
   sku: z.string().max(60).optional(),
   name: z.string().min(2).max(180),
+  description: z.string().max(5000).optional(),
   categoryKey: z.string().min(2).max(80),
+  vendor: z.string().max(120).optional(),
+  tags: z.string().max(500).optional(),
+  status: z.enum(["ACTIVE", "DRAFT"]).default("ACTIVE"),
+  mediaUrl: z.string().max(1000).optional(),
   locationKey: z.string().max(80).optional(),
   price: z.string().max(40).optional(),
+  variants: z.string().max(5000).optional(),
   controlsStock: z.boolean(),
   sellable: z.boolean(),
   usableAsInput: z.boolean(),
@@ -28,6 +34,14 @@ function clientIp(request: NextRequest) {
 function cleanOptional(value?: string) {
   const cleaned = value?.trim();
   return cleaned ? cleaned : null;
+}
+
+function tagList(value?: string) {
+  return (value ?? "")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .slice(0, 30);
 }
 
 function checkboxValue(value: FormDataEntryValue | null) {
@@ -49,6 +63,69 @@ function priceValue(value?: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function parseVariantLine(line: string, index: number, fallbackPrice: number | null) {
+  const cells = line
+    .split("|")
+    .map((cell) => cell.trim())
+    .filter(Boolean);
+
+  if (!cells.length) {
+    return null;
+  }
+
+  const options: Record<string, string> = {};
+  let sku: string | null = null;
+  let price = fallbackPrice;
+  let location: string | null = null;
+
+  for (const cell of cells) {
+    const separator = cell.indexOf("=");
+    if (separator === -1) {
+      if (!sku) {
+        sku = cell;
+      }
+      continue;
+    }
+
+    const key = cell.slice(0, separator).trim();
+    const value = cell.slice(separator + 1).trim();
+    const normalizedKey = key.toLowerCase();
+
+    if (!value) {
+      continue;
+    }
+
+    if (["sku", "codigo", "código"].includes(normalizedKey)) {
+      sku = value;
+    } else if (["precio", "price"].includes(normalizedKey)) {
+      price = priceValue(value);
+    } else if (["ubicacion", "ubicación", "location"].includes(normalizedKey)) {
+      location = locationKey(value);
+    } else {
+      options[key] = value;
+    }
+  }
+
+  if (!Object.keys(options).length) {
+    options.Variante = sku ?? `Variante ${index + 1}`;
+  }
+
+  return {
+    sku,
+    price,
+    location,
+    options
+  };
+}
+
+function parseVariants(value: string | undefined, fallbackPrice: number | null) {
+  return (value ?? "")
+    .split(/\r?\n/)
+    .map((line, index) => parseVariantLine(line, index, fallbackPrice))
+    .filter((variant): variant is NonNullable<ReturnType<typeof parseVariantLine>> => Boolean(variant))
+    .slice(0, 100);
+}
+
 export async function POST(request: NextRequest) {
   const session = await getCurrentSession();
 
@@ -64,9 +141,15 @@ export async function POST(request: NextRequest) {
   const parsed = productSchema.safeParse({
     sku: form.get("sku"),
     name: form.get("name"),
+    description: form.get("description"),
     categoryKey: form.get("categoryKey"),
+    vendor: form.get("vendor"),
+    tags: form.get("tags"),
+    status: form.get("status") === "DRAFT" ? "DRAFT" : "ACTIVE",
+    mediaUrl: form.get("mediaUrl"),
     locationKey: form.get("locationKey"),
     price: form.get("price"),
+    variants: form.get("variants"),
     controlsStock: checkboxValue(form.get("controlsStock")),
     sellable: !form.has("notSellable"),
     usableAsInput: checkboxValue(form.get("usableAsInput")),
@@ -81,6 +164,7 @@ export async function POST(request: NextRequest) {
     const requestedLocation = cleanOptional(parsed.data.locationKey);
     const normalizedLocation = requestedLocation ? locationKey(requestedLocation) : null;
     const price = priceValue(parsed.data.price);
+    const variants = parseVariants(parsed.data.variants, price);
     const controlsStock = parsed.data.controlsStock || Boolean(normalizedLocation);
     const product = await prisma.$transaction(async (tx) => {
       const created = await tx.product.create({
@@ -95,8 +179,14 @@ export async function POST(request: NextRequest) {
           requiresProduction: parsed.data.requiresProduction,
           controlsCost: controlsStock,
           attributes: {
+            ...(cleanOptional(parsed.data.description) ? { description: cleanOptional(parsed.data.description) } : {}),
+            ...(cleanOptional(parsed.data.vendor) ? { vendor: cleanOptional(parsed.data.vendor) } : {}),
+            ...(tagList(parsed.data.tags).length ? { tags: tagList(parsed.data.tags) } : {}),
+            status: parsed.data.status,
+            ...(cleanOptional(parsed.data.mediaUrl) ? { mediaUrl: cleanOptional(parsed.data.mediaUrl) } : {}),
             ...(normalizedLocation ? { primaryLocation: normalizedLocation } : {}),
-            ...(price !== null ? { price } : {})
+            ...(price !== null ? { price } : {}),
+            ...(variants.length ? { variants } : {})
           },
           createdById: session.user.id,
           updatedById: session.user.id
@@ -136,7 +226,8 @@ export async function POST(request: NextRequest) {
         usableAsInput: product.usableAsInput,
         requiresProduction: product.requiresProduction,
         locationKey: normalizedLocation,
-        price
+        price,
+        variants: variants.length
       },
       ipAddress: clientIp(request),
       userAgent: request.headers.get("user-agent") ?? undefined

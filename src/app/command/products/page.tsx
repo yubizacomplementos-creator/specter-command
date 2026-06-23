@@ -51,6 +51,15 @@ function hasShopifyProduct(attributes: unknown) {
   );
 }
 
+function variantCount(attributes: unknown) {
+  if (!attributes || typeof attributes !== "object" || Array.isArray(attributes)) {
+    return 0;
+  }
+
+  const variants = (attributes as Record<string, unknown>).variants;
+  return Array.isArray(variants) ? variants.length : 0;
+}
+
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
   const session = await requireSession();
   const params = await searchParams;
@@ -142,23 +151,64 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
 
         {canManageProducts ? (
           <section className="grid gap-4 lg:grid-cols-3">
-            <form action="/api/products" method="post" className="rounded-lg border border-slate-200 bg-white p-5">
-              <h2 className="text-lg font-semibold">Registrar producto</h2>
-              <div className="mt-4 grid gap-3">
-                <input name="name" required minLength={2} placeholder="Nombre" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
-                <input name="sku" maxLength={60} placeholder="SKU opcional" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
-                <input name="categoryKey" required minLength={2} placeholder="Categoria" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
-                <input name="price" inputMode="decimal" placeholder="Precio de venta para Shopify" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
-                <input name="locationKey" maxLength={80} placeholder="Ubicacion fisica: vitrina-1, bodega-a, caja-aretes" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
-                <div className="grid gap-2 rounded-md border border-slate-200 p-3 text-sm text-slate-600 sm:grid-cols-2">
-                  <label className="flex items-center gap-2"><input name="controlsStock" type="checkbox" /> Controla inventario</label>
-                  <label className="flex items-center gap-2"><input name="usableAsInput" type="checkbox" /> Puede ser insumo</label>
-                  <label className="flex items-center gap-2"><input name="requiresProduction" type="checkbox" /> Requiere produccion</label>
-                  <label className="flex items-center gap-2"><input name="notSellable" type="checkbox" /> No se vende directo</label>
+            <form action="/api/products" method="post" className="rounded-lg border border-slate-200 bg-white p-5 lg:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold">Registrar producto</h2>
+                  <p className="mt-1 text-sm text-slate-500">Producto maestro en Specter, listo para publicar en Shopify.</p>
                 </div>
                 <button className="rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">
                   Guardar producto
                 </button>
+              </div>
+
+              <div className="mt-5 grid gap-4">
+                <section className="grid gap-3 rounded-md border border-slate-200 p-4">
+                  <h3 className="text-sm font-semibold text-slate-700">Informacion principal</h3>
+                  <input name="name" required minLength={2} placeholder="Titulo del producto" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                  <textarea name="description" rows={4} placeholder="Descripcion del producto" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                  <input name="mediaUrl" placeholder="URL de imagen principal (opcional)" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                </section>
+
+                <section className="grid gap-3 rounded-md border border-slate-200 p-4 md:grid-cols-2">
+                  <h3 className="md:col-span-2 text-sm font-semibold text-slate-700">Organizacion</h3>
+                  <input name="categoryKey" required minLength={2} placeholder="Tipo / Categoria" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                  <input name="vendor" maxLength={120} placeholder="Proveedor / marca" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                  <input name="tags" maxLength={500} placeholder="Etiquetas separadas por coma" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600 md:col-span-2" />
+                  <label className="grid gap-2 text-sm text-slate-600">
+                    Estado en Shopify
+                    <select name="status" defaultValue="ACTIVE" className="rounded-md border border-slate-200 px-3 py-2 text-slate-950 outline-none focus:border-cyan-600">
+                      <option value="ACTIVE">Activo</option>
+                      <option value="DRAFT">Borrador</option>
+                    </select>
+                  </label>
+                </section>
+
+                <section className="grid gap-3 rounded-md border border-slate-200 p-4 md:grid-cols-2">
+                  <h3 className="md:col-span-2 text-sm font-semibold text-slate-700">Precio e inventario</h3>
+                  <input name="price" inputMode="decimal" placeholder="Precio de venta" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                  <input name="sku" maxLength={60} placeholder="SKU del producto o base" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                  <input name="locationKey" maxLength={80} placeholder="Ubicacion fisica principal" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600 md:col-span-2" />
+                  <div className="grid gap-2 rounded-md border border-slate-200 p-3 text-sm text-slate-600 md:col-span-2 sm:grid-cols-2">
+                    <label className="flex items-center gap-2"><input name="controlsStock" type="checkbox" /> Controla inventario</label>
+                    <label className="flex items-center gap-2"><input name="usableAsInput" type="checkbox" /> Puede ser insumo</label>
+                    <label className="flex items-center gap-2"><input name="requiresProduction" type="checkbox" /> Requiere produccion</label>
+                    <label className="flex items-center gap-2"><input name="notSellable" type="checkbox" /> No se vende directo</label>
+                  </div>
+                </section>
+
+                <section className="grid gap-3 rounded-md border border-slate-200 p-4">
+                  <h3 className="text-sm font-semibold text-slate-700">Variantes</h3>
+                  <p className="text-sm text-slate-500">
+                    Una variante por linea. Ejemplo: Talla=M | Color=Negro | sku=CAM-NEG-M | precio=65000 | ubicacion=caja-camisetas
+                  </p>
+                  <textarea
+                    name="variants"
+                    rows={6}
+                    placeholder={"Talla=S | Color=Negro | sku=CAM-NEG-S | precio=65000 | ubicacion=caja-camisetas\nTalla=M | Color=Negro | sku=CAM-NEG-M | precio=65000 | ubicacion=caja-camisetas"}
+                    className="rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-cyan-600"
+                  />
+                </section>
               </div>
             </form>
 
@@ -218,6 +268,11 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
                   {productPrice(product.attributes) !== null ? (
                     <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">
                       Precio: {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(productPrice(product.attributes) ?? 0)}
+                    </span>
+                  ) : null}
+                  {variantCount(product.attributes) ? (
+                    <span className="rounded-md bg-purple-50 px-2 py-1 text-purple-700">
+                      {variantCount(product.attributes)} variantes
                     </span>
                   ) : null}
                   {hasShopifyProduct(product.attributes) ? (
