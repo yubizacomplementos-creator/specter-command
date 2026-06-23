@@ -109,7 +109,7 @@ function priceFromAttributes(attributes: Record<string, unknown>) {
 
 function shopifyHandle(product: { id: string; sku: string | null; name: string }) {
   const source = product.sku || product.name || product.id;
-  return `specter-${slug(source) || product.id}`;
+  return slug(source) || `producto-${product.id.slice(-8).toLowerCase()}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -139,6 +139,11 @@ export async function POST(request: NextRequest) {
         companyId: session.company.id,
         active: true,
         deletedAt: null
+      },
+      include: {
+        company: {
+          select: { name: true, legalName: true }
+        }
       }
     }),
     prisma.integrationSetting.findUnique({
@@ -178,9 +183,9 @@ export async function POST(request: NextRequest) {
       title: product.name,
       handle,
       productType: product.categoryKey,
-      vendor: typeof attributes.vendor === "string" ? attributes.vendor : "Specter Command",
+      vendor: typeof attributes.vendor === "string" ? attributes.vendor : product.company.legalName || product.company.name,
       status: product.sellable ? "ACTIVE" : "DRAFT",
-      tags: ["specter-command", product.categoryKey],
+      tags: [product.categoryKey],
       productOptions: [
         {
           name: "Title",

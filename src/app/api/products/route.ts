@@ -11,6 +11,7 @@ const productSchema = z.object({
   name: z.string().min(2).max(180),
   categoryKey: z.string().min(2).max(80),
   locationKey: z.string().max(80).optional(),
+  price: z.string().max(40).optional(),
   controlsStock: z.boolean(),
   sellable: z.boolean(),
   usableAsInput: z.boolean(),
@@ -37,6 +38,17 @@ function locationKey(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
+function priceValue(value?: string) {
+  const cleaned = value?.trim();
+
+  if (!cleaned) {
+    return null;
+  }
+
+  const parsed = Number(cleaned.replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 export async function POST(request: NextRequest) {
   const session = await getCurrentSession();
 
@@ -45,7 +57,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (session.role === MembershipRole.VIEWER) {
-    return NextResponse.redirect(redirectBackUrl(request, "/command", { product: "forbidden" }), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command/products", { product: "forbidden" }), 303);
   }
 
   const form = await request.formData();
@@ -54,6 +66,7 @@ export async function POST(request: NextRequest) {
     name: form.get("name"),
     categoryKey: form.get("categoryKey"),
     locationKey: form.get("locationKey"),
+    price: form.get("price"),
     controlsStock: checkboxValue(form.get("controlsStock")),
     sellable: !form.has("notSellable"),
     usableAsInput: checkboxValue(form.get("usableAsInput")),
@@ -61,12 +74,13 @@ export async function POST(request: NextRequest) {
   });
 
   if (!parsed.success) {
-    return NextResponse.redirect(redirectBackUrl(request, "/command", { product: "invalid" }), 303);
+    return NextResponse.redirect(redirectBackUrl(request, "/command/products", { product: "invalid" }), 303);
   }
 
   try {
     const requestedLocation = cleanOptional(parsed.data.locationKey);
     const normalizedLocation = requestedLocation ? locationKey(requestedLocation) : null;
+    const price = priceValue(parsed.data.price);
     const controlsStock = parsed.data.controlsStock || Boolean(normalizedLocation);
     const product = await prisma.$transaction(async (tx) => {
       const created = await tx.product.create({
@@ -80,7 +94,10 @@ export async function POST(request: NextRequest) {
           usableAsInput: parsed.data.usableAsInput,
           requiresProduction: parsed.data.requiresProduction,
           controlsCost: controlsStock,
-          attributes: normalizedLocation ? { primaryLocation: normalizedLocation } : {},
+          attributes: {
+            ...(normalizedLocation ? { primaryLocation: normalizedLocation } : {}),
+            ...(price !== null ? { price } : {})
+          },
           createdById: session.user.id,
           updatedById: session.user.id
         }
@@ -118,7 +135,8 @@ export async function POST(request: NextRequest) {
         sellable: product.sellable,
         usableAsInput: product.usableAsInput,
         requiresProduction: product.requiresProduction,
-        locationKey: normalizedLocation
+        locationKey: normalizedLocation,
+        price
       },
       ipAddress: clientIp(request),
       userAgent: request.headers.get("user-agent") ?? undefined

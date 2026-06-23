@@ -17,13 +17,39 @@ const productMessages = {
   duplicate: { tone: "error", text: "No pudimos registrar el producto. Revisa si el SKU ya existe." },
   imported: { tone: "success", text: "Productos importados correctamente." },
   import_invalid: { tone: "error", text: "El archivo CSV no tiene productos validos para importar." },
-  shopify_synced: { tone: "success", text: "Productos sincronizados desde Shopify." },
+  shopify_synced: { tone: "success", text: "Productos importados desde Shopify." },
   shopify_missing: { tone: "error", text: "Configura dominio y token de Shopify en Integraciones antes de sincronizar." },
   shopify_failed: { tone: "error", text: "Shopify no respondio correctamente. Revisa dominio, token y permisos." },
   shopify_published: { tone: "success", text: "Producto publicado o actualizado en Shopify." },
   shopify_publish_invalid: { tone: "error", text: "No encontramos el producto para publicar." },
   shopify_publish_failed: { tone: "error", text: "No pudimos publicar en Shopify. Revisa permisos write_products y el token." }
 } as const;
+
+function productPrice(attributes: unknown) {
+  if (!attributes || typeof attributes !== "object" || Array.isArray(attributes)) {
+    return null;
+  }
+
+  const value = (attributes as Record<string, unknown>).price;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function hasShopifyProduct(attributes: unknown) {
+  return Boolean(
+    attributes &&
+      typeof attributes === "object" &&
+      !Array.isArray(attributes) &&
+      typeof (attributes as Record<string, unknown>).shopifyProductId === "string"
+  );
+}
 
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
   const session = await requireSession();
@@ -122,6 +148,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
                 <input name="name" required minLength={2} placeholder="Nombre" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
                 <input name="sku" maxLength={60} placeholder="SKU opcional" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
                 <input name="categoryKey" required minLength={2} placeholder="Categoria" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
+                <input name="price" inputMode="decimal" placeholder="Precio de venta para Shopify" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
                 <input name="locationKey" maxLength={80} placeholder="Ubicacion fisica: vitrina-1, bodega-a, caja-aretes" className="rounded-md border border-slate-200 px-3 py-2 outline-none focus:border-cyan-600" />
                 <div className="grid gap-2 rounded-md border border-slate-200 p-3 text-sm text-slate-600 sm:grid-cols-2">
                   <label className="flex items-center gap-2"><input name="controlsStock" type="checkbox" /> Controla inventario</label>
@@ -147,20 +174,20 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
               </div>
             </form>
 
-            <form action="/api/shopify/products/sync" method="post" className="rounded-lg border border-slate-200 bg-white p-5">
+            <div className="rounded-lg border border-slate-200 bg-white p-5">
               <h2 className="text-lg font-semibold">Shopify</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Trae los productos y variantes recientes desde Shopify usando la credencial guardada.
+                Crea el producto en Specter y publicalo desde el listado hacia Shopify. Shopify queda como canal de venta, no como origen principal.
               </p>
               <div className="mt-4 grid gap-3">
                 <p className={`rounded-md px-3 py-2 text-sm ${hasShopifyDomain ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
                   {hasShopifyDomain ? "Configuracion detectada" : "Pendiente en Integraciones"}
                 </p>
-                <button className="rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">
-                  Sincronizar Shopify
-                </button>
+                <p className="text-sm text-slate-500">
+                  Despues de guardar un producto, usa el boton Publicar en Shopify de ese producto.
+                </p>
               </div>
-            </form>
+            </div>
           </section>
         ) : null}
 
@@ -188,12 +215,20 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
                       Ubicacion: {product.inventoryItems.map((item) => item.locationKey).join(", ")}
                     </span>
                   ) : null}
+                  {productPrice(product.attributes) !== null ? (
+                    <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">
+                      Precio: {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(productPrice(product.attributes) ?? 0)}
+                    </span>
+                  ) : null}
+                  {hasShopifyProduct(product.attributes) ? (
+                    <span className="rounded-md bg-indigo-50 px-2 py-1 text-indigo-700">Publicado en Shopify</span>
+                  ) : null}
                 </div>
                 {canManageProducts ? (
                   <form action="/api/shopify/products/publish" method="post" className="mt-3">
                     <input type="hidden" name="productId" value={product.id} />
                     <button className="rounded-md border border-cyan-200 px-3 py-2 text-xs font-semibold text-cyan-700 hover:border-cyan-700">
-                      Publicar en Shopify
+                      {hasShopifyProduct(product.attributes) ? "Actualizar en Shopify" : "Publicar en Shopify"}
                     </button>
                   </form>
                 ) : null}
