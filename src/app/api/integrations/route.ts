@@ -72,14 +72,14 @@ export async function POST(request: NextRequest) {
   }
 
   if (session.role !== MembershipRole.OWNER && session.role !== MembershipRole.ADMIN) {
-    return NextResponse.redirect(publicUrl(request, "/command?integration=forbidden"), 303);
+    return NextResponse.redirect(publicUrl(request, "/command/settings?integration=forbidden"), 303);
   }
 
   const form = await request.formData();
   const parsedProvider = providerSchema.safeParse(form.get("provider"));
 
   if (!parsedProvider.success) {
-    return NextResponse.redirect(publicUrl(request, "/command?integration=invalid"), 303);
+    return NextResponse.redirect(publicUrl(request, "/command/settings?integration=invalid"), 303);
   }
 
   const provider = parsedProvider.data;
@@ -143,5 +143,5 @@ export async function POST(request: NextRequest) {
     userAgent: request.headers.get("user-agent") ?? undefined
   });
 
-  return NextResponse.redirect(publicUrl(request, `/command?integration=${provider}`), 303);
+  return NextResponse.redirect(publicUrl(request, `/command/settings?integration=${provider}`), 303);
 }

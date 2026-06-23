@@ -15,6 +15,9 @@ const integrationMessages = {
   resend: { tone: "success", text: "Configuracion de Resend actualizada." },
   sentry: { tone: "success", text: "Configuracion de Sentry actualizada." },
   shopify: { tone: "success", text: "Configuracion de Shopify actualizada." },
+  shopify_connected: { tone: "success", text: "Tienda Shopify conectada correctamente." },
+  shopify_missing: { tone: "error", text: "Primero escribe el dominio .myshopify.com de la tienda y guarda Shopify." },
+  shopify_failed: { tone: "error", text: "No pudimos conectar Shopify. Revisa permisos, dominio o vuelve a intentar." },
   bot: { tone: "success", text: "Configuracion del bot actualizada." },
   forbidden: { tone: "error", text: "Tu rol no permite editar integraciones." },
   invalid: { tone: "error", text: "La integracion seleccionada no es valida." }
@@ -155,6 +158,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           {integrations.map((integration) => {
             const current = integrationMap.get(integration.provider);
             const secrets = configuredSecrets(current?.publicConfig);
+            const shopDomain = integration.provider === "shopify" ? configValue(current?.publicConfig, "shopDomain") : "";
             return (
               <form key={integration.provider} action="/api/integrations" method="post" className="rounded-lg border border-slate-200 bg-white p-5">
                 <input type="hidden" name="provider" value={integration.provider} />
@@ -194,9 +198,19 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                   ))}
                 </div>
                 {canManageIntegrations ? (
-                  <button className="mt-4 rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">
-                    Guardar {integration.title}
-                  </button>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button className="rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">
+                      Guardar {integration.title}
+                    </button>
+                    {integration.provider === "shopify" && shopDomain ? (
+                      <a
+                        href={`/api/shopify/oauth/start?shop=${encodeURIComponent(shopDomain)}`}
+                        className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Conectar Shopify
+                      </a>
+                    ) : null}
+                  </div>
                 ) : null}
               </form>
             );
